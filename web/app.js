@@ -120,13 +120,77 @@
     els.statusPill.textContent = isLive ? 'LIVE' : 'ENDED';
     els.statusPill.className = 'pill' + (isLive ? '' : ' ended');
 
-    renderRounds(event);
+    if (event.format === 'knockout') renderKnockoutRounds(event);
+    else renderRounds(event);
     renderStandings(event);
 
     if (updatedAt) {
       var d = new Date(updatedAt);
       els.updatedAt.textContent = 'Updated ' + d.toLocaleTimeString();
     }
+  }
+
+  // Kept in sync with knockoutRoundName() in src/lib/tournament.ts.
+  function knockoutRoundName(competitorCount) {
+    switch (competitorCount) {
+      case 2: return 'Final';
+      case 4: return 'Semi Finals';
+      case 8: return 'Quarter Finals';
+      case 16: return 'Round of 16';
+      case 32: return 'Round of 32';
+      default: return 'Round of ' + competitorCount;
+    }
+  }
+
+  // Mirrors KnockoutScreen.tsx's scoreBox()/renderColumns()/renderThirdPlace() — a
+  // single-elimination bracket, not the flat per-court rounds list other formats use.
+  // Rendered as stacked sections (one per round) rather than side-by-side bracket
+  // columns, which reads better on a narrow share-page than replicating the app's
+  // connecting-line bracket geometry in plain CSS.
+  function renderKnockoutMatch(event, m, isFirstRound) {
+    function slot(id, otherId, score, otherScore) {
+      var decided = score != null && otherScore != null && score !== otherScore;
+      var isWinner = decided && score > otherScore;
+      var isBye = !!id && !otherId && isFirstRound;
+      var label = id ? esc(shortName(playerName(event.players, id))) : 'TBD';
+      var scoreHtml = isBye
+        ? '<span class="ko-bye">BYE</span>'
+        : '<span class="' + scoreBoxClass(score != null, isWinner) + ' ko-score">' + (score != null ? score : '–') + '</span>';
+      return (
+        '<div class="ko-slot' + (isWinner ? ' ko-slot-winner' : '') + '">' +
+        '<span class="ko-name' + (!id ? ' ko-tbd' : '') + '">' + label + '</span>' +
+        scoreHtml +
+        '</div>'
+      );
+    }
+    var idA = m.teamA[0], idB = m.teamB[0];
+    return (
+      '<div class="ko-card">' +
+      slot(idA, idB, m.scoreA, m.scoreB) +
+      slot(idB, idA, m.scoreB, m.scoreA) +
+      '</div>'
+    );
+  }
+
+  function renderKnockoutRounds(event) {
+    var html = '';
+    event.rounds.forEach(function (round, ri) {
+      var competitors = round.matches.length * 2;
+      var isFirstRound = ri === 0;
+      html += '<div class="round-block"><h2 class="round-title">' + esc(knockoutRoundName(competitors)) + '</h2>';
+      round.matches.forEach(function (m) {
+        html += renderKnockoutMatch(event, m, isFirstRound);
+      });
+      html += '</div>';
+    });
+    if (event.thirdPlaceMatch) {
+      html += '<div class="round-block"><h2 class="round-title">3rd Place</h2>' + renderKnockoutMatch(event, event.thirdPlaceMatch, false) + '</div>';
+    }
+    els.roundsPane.innerHTML = html;
+  }
+
+  function scoreBoxClass(filled, win) {
+    return 'score-box' + (filled ? (win ? ' win' : ' filled') : '');
   }
 
   function renderRounds(event) {
@@ -148,10 +212,6 @@
         var winB = done && m.scoreB > m.scoreA;
         var status = done ? 'DONE' : isCurrentRound ? 'LIVE' : 'WAITING';
         var statusClass = done ? 'status-done' : isCurrentRound ? 'status-live' : 'status-waiting';
-
-        function scoreBoxClass(filled, win) {
-          return 'score-box' + (filled ? win ? ' win' : ' filled' : '');
-        }
 
         html +=
           '<div class="court-card"><div class="court-top"><span class="court-name">' +

@@ -53,6 +53,8 @@ export function HomeScreen() {
       status: 'draft',
       createdAt: Date.now(),
       resultBgUri: undefined,
+      shareId: undefined,
+      editToken: undefined,
     };
     const live = startEvent(draftCopy, ev.totalRoundsEstimate);
     await addEvent(live);

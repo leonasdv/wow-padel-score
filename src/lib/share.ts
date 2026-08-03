@@ -13,6 +13,7 @@ function buildPayload(event: WowEvent) {
     courts: event.courts,
     players: event.players,
     rounds: event.rounds,
+    thirdPlaceMatch: event.thirdPlaceMatch, // knockout only — lives outside `rounds`
     currentRoundIndex: event.currentRoundIndex,
     totalRoundsEstimate: event.totalRoundsEstimate,
     status: event.status,
