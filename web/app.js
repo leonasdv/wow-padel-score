@@ -1,6 +1,6 @@
 (function () {
   var CFG = window.WOWPADEL_CONFIG || {};
-  var POLL_MS = 30000;
+  var POLL_MS = 5000;
   var pollTimer = null;
 
   // Kept in sync with src/types.ts FORMAT_META names.
