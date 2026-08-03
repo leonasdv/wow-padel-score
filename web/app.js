@@ -1,6 +1,7 @@
 (function () {
   var CFG = window.WOWPADEL_CONFIG || {};
-  var POLL_MS = 60000;
+  var POLL_MS = 30000;
+  var pollTimer = null;
 
   // Kept in sync with src/types.ts FORMAT_META names.
   var FORMAT_NAMES = {
@@ -126,8 +127,11 @@
 
     if (updatedAt) {
       var d = new Date(updatedAt);
-      els.updatedAt.textContent = 'Updated ' + d.toLocaleTimeString();
+      els.updatedAt.textContent = (isLive ? 'Updated ' : 'Final · ') + d.toLocaleTimeString();
     }
+
+    // Finished (or not-yet-live) events won't change again — stop polling once we've shown them.
+    if (!isLive) stopPolling();
   }
 
   // Kept in sync with knockoutRoundName() in src/lib/tournament.ts.
@@ -288,7 +292,11 @@
   els.tabRoundsBtn.addEventListener('click', function () { setTab('rounds'); });
   els.tabStandingsBtn.addEventListener('click', function () { setTab('standings'); });
 
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
   showState('loading');
   fetchEvent();
-  setInterval(fetchEvent, POLL_MS);
+  pollTimer = setInterval(fetchEvent, POLL_MS);
 })();
