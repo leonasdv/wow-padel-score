@@ -24,6 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Stamp cache-busting version
+        run: sed -i "s/__DEPLOY_VERSION__/${GITHUB_SHA::8}/g" ./web/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./web
