@@ -73,9 +73,12 @@
       showState('error', 'Page misconfigured: web/config.js is missing supabaseUrl/supabaseAnonKey.');
       return;
     }
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function () { controller.abort(); }, 8000);
     try {
       var res = await fetch(CFG.supabaseUrl.replace(/\/$/, '') + '/rest/v1/rpc/get_shared_event', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           apikey: CFG.supabaseAnonKey,
@@ -83,6 +86,7 @@
         },
         body: JSON.stringify({ p_share_id: shareId }),
       });
+      clearTimeout(timeoutId);
       if (!res.ok) throw new Error('Request failed: HTTP ' + res.status);
       var rows = await res.json();
       var row = Array.isArray(rows) ? rows[0] : rows;
@@ -93,10 +97,17 @@
       hasShownContent = true;
       showState('content');
     } catch (err) {
+      clearTimeout(timeoutId);
       console.error('Failed to load shared event', err);
       // Only replace what's on screen if we've never successfully shown anything yet —
       // a later poll failing shouldn't blow away a page that's already rendered fine.
-      if (!hasShownContent) showState('error', String((err && err.message) || err));
+      if (!hasShownContent) {
+        var isTimeout = err && err.name === 'AbortError';
+        var message = isTimeout
+          ? 'Request to Supabase timed out after 8s — your network (WiFi/mobile data, VPN, or DNS filter) may be blocking ' + (CFG.supabaseUrl || 'the API') + '.'
+          : String((err && err.message) || err);
+        showState('error', message);
+      }
     }
   }
 
