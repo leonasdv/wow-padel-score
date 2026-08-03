@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { pushEventUpdate } from '../lib/share';
 import type { WowEvent } from '../types';
 
 const STORAGE_KEY = '@wow_padel_score/events';
@@ -46,7 +47,16 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
 
   const updateEvent = useCallback(
     async (id: string, updater: (event: WowEvent) => WowEvent) => {
-      await persist(events.map((e) => (e.id === id ? updater(e) : e)));
+      let updated: WowEvent | undefined;
+      await persist(
+        events.map((e) => {
+          if (e.id !== id) return e;
+          updated = updater(e);
+          return updated;
+        })
+      );
+      // Best-effort sync to the published share link, if any — never blocks or throws into the caller.
+      if (updated?.shareId) pushEventUpdate(updated).catch(() => {});
     },
     [events, persist]
   );

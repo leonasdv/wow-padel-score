@@ -63,6 +63,8 @@ export interface WowEvent {
   resultBgUri?: string;
   resultPodiumPosition?: 'top' | 'bottom';
   resultTemplate?: 'list' | 'podium' | 'table';
+  shareId?: string; // set once the event is published to the public live share link
+  editToken?: string; // private token authorizing updates to the published copy — never shown to users
 }
 
 export interface Standing {
