@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { Button } from '../components/Button';
@@ -13,6 +13,7 @@ import { SegmentedTabs } from '../components/SegmentedTabs';
 import { TiebreakInfoModal, type TiebreakEntry } from '../components/TiebreakInfoModal';
 import { useEvents } from '../data/store';
 import { makeId } from '../lib/id';
+import { publishEvent, shareUrlFor } from '../lib/share';
 import {
   addPlayerMidEvent,
   advanceRound,
@@ -74,6 +75,7 @@ export function DashboardScreen() {
   const [swapOutgoing, setSwapOutgoing] = useState<{ id: string; round: number } | null>(null);
   const [tiebreakInfo, setTiebreakInfo] = useState<{ playerName: string; points: number; entries: TiebreakEntry[] } | null>(null);
   const [roundsSearch, setRoundsSearch] = useState('');
+  const [shareBusy, setShareBusy] = useState(false);
 
   const searchResults = useMemo(() => {
     const q = roundsSearch.trim().toLowerCase();
@@ -105,6 +107,24 @@ export function DashboardScreen() {
       </ScreenBackground>
     );
   }
+
+  const onShareLive = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      let target = event;
+      if (!target.shareId) {
+        const published = await publishEvent(target);
+        await updateEvent(event.id, () => published);
+        target = published;
+      }
+      await Share.share({ message: shareUrlFor(target.shareId!) });
+    } catch (err: any) {
+      Alert.alert('Something went wrong', err?.message ?? 'Could not create the share link. Check your connection and try again.');
+    } finally {
+      setShareBusy(false);
+    }
+  };
 
   const currentRound: Round | undefined = event.rounds.find((r) => r.index === event.currentRoundIndex);
   const allScored = currentRound ? currentRound.matches.every((m) => m.scoreA != null && m.scoreB != null) : false;
@@ -478,22 +498,46 @@ export function DashboardScreen() {
             )}
 
             {event.status === 'live' && (
-              <View style={styles.footer}>
-                <Button
-                  label={isLastRound ? 'Finish event' : `End Round ${event.currentRoundIndex}`}
-                  icon="chevron-forward"
-                  onPress={onEndRound}
-                />
+              <View style={[styles.footer, styles.footerRow]}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label={isLastRound ? 'Finish event' : `End Round ${event.currentRoundIndex}`}
+                    icon="chevron-forward"
+                    onPress={onEndRound}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Share live"
+                    variant="secondary"
+                    icon="share-social-outline"
+                    iconPosition="left"
+                    loading={shareBusy}
+                    onPress={onShareLive}
+                  />
+                </View>
               </View>
             )}
             {event.status === 'done' && (
-              <View style={styles.footer}>
-                <Button
-                  label="Share result card"
-                  icon="share-social-outline"
-                  iconPosition="left"
-                  onPress={() => nav.navigate('ResultCard', { eventId: event.id })}
-                />
+              <View style={[styles.footer, styles.footerRow]}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Share result card"
+                    icon="share-social-outline"
+                    iconPosition="left"
+                    onPress={() => nav.navigate('ResultCard', { eventId: event.id })}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Share live"
+                    variant="secondary"
+                    icon="share-social-outline"
+                    iconPosition="left"
+                    loading={shareBusy}
+                    onPress={onShareLive}
+                  />
+                </View>
               </View>
             )}
         </View>
@@ -577,13 +621,25 @@ export function DashboardScreen() {
                 );
               })}
             </ScrollView>
-            <View style={styles.footer}>
-              <Button
-                label="Share standings"
-                icon="share-social-outline"
-                iconPosition="left"
-                onPress={() => nav.navigate('ResultCard', { eventId: event.id, template: 'table' })}
-              />
+            <View style={[styles.footer, styles.footerRow]}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Share standings"
+                  icon="share-social-outline"
+                  iconPosition="left"
+                  onPress={() => nav.navigate('ResultCard', { eventId: event.id, template: 'table' })}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Share live"
+                  variant="secondary"
+                  icon="share-social-outline"
+                  iconPosition="left"
+                  loading={shareBusy}
+                  onPress={onShareLive}
+                />
+              </View>
             </View>
         </View>
 
@@ -673,6 +729,7 @@ const styles = StyleSheet.create({
   endEventRow: { alignItems: 'center', paddingVertical: 8 },
   endEventText: { color: colors.textFaint, fontWeight: '700', fontSize: 13, textDecorationLine: 'underline' },
   footer: { paddingHorizontal: 22, paddingBottom: 24, paddingTop: 6 },
+  footerRow: { flexDirection: 'row', gap: 10 },
   standingsRoundText: { paddingHorizontal: 22, paddingTop: 14, fontSize: 13, fontWeight: '700', color: colors.textMuted },
   searchRow: {
     flexDirection: 'row',

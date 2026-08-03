@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as Clipboard from 'expo-clipboard';
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { RenameModal } from '../components/RenameModal';
@@ -10,6 +11,7 @@ import { Avatar } from '../components/Avatar';
 import { ScreenBackground } from '../components/Misc';
 import { useEvents } from '../data/store';
 import { makeId } from '../lib/id';
+import { publishEvent, shareUrlFor, unpublishEvent } from '../lib/share';
 import { addPlayerMidEvent, isRankingBased, minPlayersFor, removePlayer } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, radius } from '../theme/tokens';
@@ -27,6 +29,7 @@ export function EditEventScreen() {
   const [editTarget, setEditTarget] = useState<'event' | 'court' | 'player'>('player');
   const [editInitial, setEditInitial] = useState('');
   const [addPlayerVisible, setAddPlayerVisible] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
 
   if (!event) {
     return (
@@ -97,6 +100,34 @@ export function EditEventScreen() {
     await updateEvent(event.id, (e) => addPlayerMidEvent(e, { id: makeId('player'), name, gender }));
   };
 
+  const onToggleShare = async (value: boolean) => {
+    setShareBusy(true);
+    try {
+      if (value) {
+        const published = await publishEvent(event);
+        await updateEvent(event.id, () => published);
+      } else {
+        const unpublished = await unpublishEvent(event);
+        await updateEvent(event.id, () => unpublished);
+      }
+    } catch (err: any) {
+      Alert.alert('Something went wrong', err?.message ?? 'Could not update the share link. Check your connection and try again.');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const onShareLink = () => {
+    if (!event.shareId) return;
+    Share.share({ message: shareUrlFor(event.shareId) });
+  };
+
+  const onCopyLink = async () => {
+    if (!event.shareId) return;
+    await Clipboard.setStringAsync(shareUrlFor(event.shareId));
+    Alert.alert('Copied', 'Link copied to clipboard.');
+  };
+
   return (
     <ScreenBackground>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -123,6 +154,26 @@ export function EditEventScreen() {
               <Ionicons name="create-outline" size={17} color={colors.textFaint} />
             </Pressable>
           </View>
+
+          <Text style={styles.sectionLabel}>Live share link</Text>
+          <View style={[styles.row, { marginBottom: event.shareId ? 10 : 24 }]}>
+            <Text style={styles.rowText} numberOfLines={1}>
+              {event.shareId ? 'Published — anyone with the link can watch live' : 'Publish a read-only link anyone can watch live'}
+            </Text>
+            <Switch value={!!event.shareId} onValueChange={onToggleShare} disabled={shareBusy} trackColor={{ true: colors.lime }} />
+          </View>
+          {event.shareId && (
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 24 }}>
+              <Pressable style={styles.linkAction} onPress={onCopyLink}>
+                <Ionicons name="copy-outline" size={15} color={colors.textPrimary} />
+                <Text style={styles.linkActionText}>Copy link</Text>
+              </Pressable>
+              <Pressable style={styles.linkAction} onPress={onShareLink}>
+                <Ionicons name="share-outline" size={15} color={colors.textPrimary} />
+                <Text style={styles.linkActionText}>Share</Text>
+              </Pressable>
+            </View>
+          )}
 
           {!isKnockout && (
             <>
@@ -211,6 +262,8 @@ const styles = StyleSheet.create({
   addLink: { fontSize: 13, fontWeight: '800', color: colors.lime },
   editHint: { fontSize: 11, color: colors.textFaint, marginBottom: 12, marginTop: -4 },
   row: { height: 52, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.hairline, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 12 },
+  linkAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, height: 42, borderRadius: 12, backgroundColor: colors.white06, borderWidth: 1, borderColor: colors.hairline },
+  linkActionText: { fontSize: 13, fontWeight: '800', color: colors.textPrimary },
   rowIndex: { fontSize: 12, fontWeight: '800', color: colors.textFaint, width: 16 },
   rowText: { flex: 1, fontWeight: '700', fontSize: 15, color: colors.textPrimary },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: 11, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.hairline, borderRadius: 13, padding: 8, paddingHorizontal: 12 },
