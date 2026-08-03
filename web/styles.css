@@ -1,0 +1,104 @@
+/* Mirrors src/theme/tokens.ts — keep in sync if the app palette changes. */
+:root {
+  --court-navy: #0B1E3B;
+  --surface: #13294D;
+  --surface-sunken: #0a1a34;
+  --lime: #C6EA3B;
+  --court-blue: #2F80FF;
+  --blue-text: #7FB2FF;
+  --male: #43B0FF;
+  --female: #FF6FA5;
+  --text-primary: #EAF1FF;
+  --text-secondary: #B9C8E2;
+  --text-muted: #92A6C9;
+  --text-faint: #6E82A6;
+  --amber: #FFB43C;
+  --hairline: rgba(255,255,255,.08);
+  --hairline-strong: rgba(255,255,255,.14);
+  --white06: rgba(255,255,255,.06);
+  --white05: rgba(255,255,255,.05);
+  --blue-tint: rgba(47,128,255,.1);
+  --blue-tint-border: rgba(47,128,255,.25);
+  --lime-tint: rgba(198,234,59,.14);
+  --gold: #FFD34E;
+  --silver: #C9D6E5;
+  --bronze: #E39A5B;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: linear-gradient(180deg, #0d264a, #071733 50%, #040d1f);
+  color: var(--text-primary);
+}
+
+#app { max-width: 640px; margin: 0 auto; min-height: 100vh; padding-bottom: 40px; }
+
+.state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 14px; text-align: center; padding: 24px; }
+.state p { margin: 0; color: var(--text-muted); }
+.notfound-title { font-size: 20px; font-weight: 800; color: var(--text-primary) !important; }
+.notfound-body { font-size: 14px; }
+
+.spinner {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 3px solid var(--hairline-strong);
+  border-top-color: var(--lime);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.header { padding: 24px 20px 8px; }
+.header-top { display: flex; justify-content: flex-end; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--blue-tint); border: 1px solid var(--blue-tint-border); color: var(--blue-text); font-size: 12px; font-weight: 800; letter-spacing: 0.5px; }
+.pill.ended { background: var(--white06); border-color: var(--hairline); color: var(--text-faint); }
+.pill.dot::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--blue-text); }
+
+h1 { margin: 14px 0 4px; font-size: 26px; font-weight: 900; letter-spacing: -0.5px; }
+.meta { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+.tabs { display: flex; gap: 8px; padding: 16px 20px 4px; }
+.tab { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--hairline); background: var(--white05); color: var(--text-muted); font-weight: 800; font-size: 13px; cursor: pointer; }
+.tab.active { background: var(--surface); color: var(--text-primary); border-color: var(--hairline-strong); }
+
+main { padding: 12px 20px 0; }
+
+.round-block { margin-bottom: 22px; }
+.round-title { font-size: 15px; font-weight: 900; margin: 0 0 10px; }
+.round-title span { font-weight: 700; color: var(--text-faint); font-size: 13px; margin-left: 6px; }
+
+.court-card { border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface); padding: 12px 14px; margin-bottom: 10px; }
+.court-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.court-name { font-size: 12px; font-weight: 800; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; }
+.status-badge { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; letter-spacing: 0.5px; }
+.status-done { background: var(--lime-tint); color: var(--lime); }
+.status-live { background: var(--blue-tint); color: var(--blue-text); }
+.status-waiting { background: rgba(255,180,60,.14); color: var(--amber); }
+.status-idle { background: var(--white06); color: var(--text-faint); }
+
+.match-row { display: flex; align-items: center; gap: 10px; }
+.team { flex: 1; min-width: 0; }
+.team.right { text-align: right; }
+.player-line { display: block; font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.score-box { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--hairline-strong); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; background: rgba(255,255,255,.03); color: var(--text-faint); flex-shrink: 0; }
+.score-box.filled { background: var(--surface-sunken); color: var(--text-primary); }
+.score-box.win { background: var(--lime-tint); border-color: var(--lime); color: var(--lime); }
+.vs { font-size: 11px; color: var(--text-faint); font-weight: 700; flex-shrink: 0; }
+.idle-text { font-size: 13px; color: var(--text-faint); }
+.sit-outs { font-size: 12px; color: var(--text-faint); margin: 4px 2px 0; }
+
+.table-header { display: flex; align-items: center; padding: 0 10px 8px; gap: 8px; }
+.th { font-size: 11px; font-weight: 800; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.stand-row { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 13px; border: 1px solid var(--white05); background: rgba(255,255,255,.02); margin-bottom: 6px; }
+.stand-row.top { border-color: rgba(198,234,59,.18); background: rgba(198,234,59,.06); }
+.rank-badge { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: var(--white06); color: var(--text-muted); flex-shrink: 0; }
+.stand-name-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.gender-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.stand-name { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stand-cell { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--text-primary); text-align: center; }
+.stand-pts { font-size: 15px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+
+.footer { padding: 24px 20px; text-align: center; font-size: 12px; color: var(--text-faint); }

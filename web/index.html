@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WOWPadel Score — Live</title>
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="state" id="stateLoading">
+      <div class="spinner"></div>
+      <p>Loading tournament…</p>
+    </div>
+
+    <div class="state" id="stateNotFound" hidden>
+      <p class="notfound-title">Link not found</p>
+      <p class="notfound-body">This event isn't published, or the organizer unpublished it.</p>
+    </div>
+
+    <div id="content" hidden>
+      <header class="header">
+        <div class="header-top">
+          <span class="pill" id="statusPill">LIVE</span>
+        </div>
+        <h1 id="eventName">—</h1>
+        <p class="meta" id="eventMeta">—</p>
+      </header>
+
+      <nav class="tabs">
+        <button class="tab active" id="tabRoundsBtn">Rounds</button>
+        <button class="tab" id="tabStandingsBtn">Standings</button>
+      </nav>
+
+      <main>
+        <section id="roundsPane"></section>
+        <section id="standingsPane" hidden></section>
+      </main>
+
+      <footer class="footer">
+        <span id="updatedAt"></span> · WOWPadel Score
+      </footer>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
