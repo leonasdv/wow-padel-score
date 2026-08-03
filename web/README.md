@@ -1,7 +1,7 @@
 # WOWPadel Score — live share page
 
 A static, dependency-free page that shows a published event's rounds and standings, updating
-every 5 seconds. No build step — just HTML/CSS/vanilla JS.
+every 60 seconds. No build step — just HTML/CSS/vanilla JS.
 
 ## Configure
 
