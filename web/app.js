@@ -14,11 +14,14 @@
 
   var shareId = new URLSearchParams(window.location.search).get('e');
   var lastUpdatedAt = null;
+  var hasShownContent = false;
   var activeTab = 'rounds';
 
   var els = {
     loading: document.getElementById('stateLoading'),
     notFound: document.getElementById('stateNotFound'),
+    errorState: document.getElementById('stateError'),
+    errorMessage: document.getElementById('errorMessage'),
     content: document.getElementById('content'),
     statusPill: document.getElementById('statusPill'),
     eventName: document.getElementById('eventName'),
@@ -30,10 +33,12 @@
     updatedAt: document.getElementById('updatedAt'),
   };
 
-  function showState(name) {
+  function showState(name, message) {
     els.loading.hidden = name !== 'loading';
     els.notFound.hidden = name !== 'notFound';
+    els.errorState.hidden = name !== 'error';
     els.content.hidden = name !== 'content';
+    if (name === 'error') els.errorMessage.textContent = message || 'Unknown error.';
   }
 
   function esc(s) {
@@ -63,10 +68,9 @@
   }
 
   async function fetchEvent() {
-    if (!shareId) { showState('notFound'); return; }
+    if (!shareId) { showState('error', 'No event id in the link (missing ?e=...).'); return; }
     if (!CFG.supabaseUrl || !CFG.supabaseAnonKey) {
-      console.error('web/config.js is missing supabaseUrl/supabaseAnonKey.');
-      showState('notFound');
+      showState('error', 'Page misconfigured: web/config.js is missing supabaseUrl/supabaseAnonKey.');
       return;
     }
     try {
@@ -79,17 +83,20 @@
         },
         body: JSON.stringify({ p_share_id: shareId }),
       });
-      if (!res.ok) throw new Error('Request failed: ' + res.status);
+      if (!res.ok) throw new Error('Request failed: HTTP ' + res.status);
       var rows = await res.json();
       var row = Array.isArray(rows) ? rows[0] : rows;
       if (!row || !row.payload) { showState('notFound'); return; }
       if (row.updated_at === lastUpdatedAt) return; // no change, skip re-render
+      render(row.payload, row.updated_at); // may throw on unexpected data shapes
       lastUpdatedAt = row.updated_at;
-      render(row.payload, row.updated_at);
+      hasShownContent = true;
       showState('content');
     } catch (err) {
       console.error('Failed to load shared event', err);
-      if (lastUpdatedAt === null) showState('notFound');
+      // Only replace what's on screen if we've never successfully shown anything yet —
+      // a later poll failing shouldn't blow away a page that's already rendered fine.
+      if (!hasShownContent) showState('error', String((err && err.message) || err));
     }
   }
 
