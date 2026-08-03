@@ -219,6 +219,9 @@
         '<div style="width:' + KO_COL_W + 'px">' + renderKnockoutMatch(event, event.thirdPlaceMatch, false) + '</div></div>';
     }
     els.roundsPane.innerHTML = html;
+    // Only show the "more to scroll" fade when the bracket is actually wider than the viewport.
+    var scroller = els.roundsPane.querySelector('.ko-bracket-scroll');
+    if (scroller) scroller.classList.toggle('has-overflow', scroller.scrollWidth > scroller.clientWidth + 1);
   }
 
   function scoreBoxClass(filled, win) {
