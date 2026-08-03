@@ -3,7 +3,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Sharing from 'expo-sharing';
 import React, { useRef, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
 import { Button } from '../components/Button';
@@ -11,6 +11,7 @@ import { IconButton, LivePulseDot, ScreenBackground } from '../components/Misc';
 import { ScoreKeypad } from '../components/ScoreKeypad';
 import { WowLogo } from '../components/WowLogo';
 import { useEvents } from '../data/store';
+import { publishEvent, shareUrlFor } from '../lib/share';
 import { knockoutRoundName, replaceParticipant, setKnockoutScore, setThirdPlaceScore } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, radius } from '../theme/tokens';
@@ -41,6 +42,7 @@ export function KnockoutScreen() {
   const [buffer, setBuffer] = useState('');
   const [rename, setRename] = useState<{ id: string; text: string } | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
   const bracketShotRef = useRef<ViewShotRef>(null);
 
   if (!event) {
@@ -162,6 +164,24 @@ export function KnockoutScreen() {
       </View>
     ) : null;
 
+  const onShareLive = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      let target = event;
+      if (!target.shareId) {
+        const published = await publishEvent(target);
+        await updateEvent(event.id, () => published);
+        target = published;
+      }
+      await Share.share({ message: shareUrlFor(target.shareId!) });
+    } catch (err: any) {
+      Alert.alert('Something went wrong', err?.message ?? 'Could not create the share link. Check your connection and try again.');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
   const shareBracket = async () => {
     if (!bracketShotRef.current || sharing) return;
     setSharing(true);
@@ -243,14 +263,26 @@ export function KnockoutScreen() {
 
         <View style={styles.footer}>
           {event.status === 'done' ? (
-            <Button
-              label="View results & share"
-              icon="trophy-outline"
-              iconPosition="left"
-              onPress={() => nav.navigate('ResultCard', { eventId: event.id })}
-            />
+            <View style={styles.footerRow}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="View results & share"
+                  icon="trophy-outline"
+                  iconPosition="left"
+                  onPress={() => nav.navigate('ResultCard', { eventId: event.id })}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button label="Share live" variant="secondary" icon="share-social-outline" iconPosition="left" loading={shareBusy} onPress={onShareLive} />
+              </View>
+            </View>
           ) : (
-            <Text style={styles.footerHint}>Tap a competitor's score box to enter results. Winners advance automatically.</Text>
+            <>
+              <Text style={styles.footerHint}>Tap a competitor's score box to enter results. Winners advance automatically.</Text>
+              <View style={{ marginTop: 10 }}>
+                <Button label="Share live" variant="secondary" icon="share-social-outline" iconPosition="left" loading={shareBusy} onPress={onShareLive} />
+              </View>
+            </>
           )}
         </View>
 
@@ -352,6 +384,7 @@ const styles = StyleSheet.create({
   scoreChipWinner: { backgroundColor: colors.lime, borderColor: colors.lime },
   scoreChipText: { fontSize: 16, fontWeight: '800', color: colors.textPrimary, fontVariant: ['tabular-nums'] },
   footer: { paddingHorizontal: 22, paddingBottom: 22, paddingTop: 8 },
+  footerRow: { flexDirection: 'row', gap: 10 },
   footerHint: { fontSize: 12, color: colors.textFaint, textAlign: 'center', lineHeight: 17 },
   renameBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(4,10,25,.6)' },
   renameCenter: { flex: 1, justifyContent: 'center', paddingHorizontal: 30 },

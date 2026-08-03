@@ -176,19 +176,47 @@
     );
   }
 
+  // Exact geometry from KnockoutScreen.tsx so the bracket lines up the same way as
+  // the app: each round's cards sit vertically centered between their two feeders.
+  var KO_CARD_H = 72;
+  var KO_GAP0 = 18;
+  var KO_UNIT = KO_CARD_H + KO_GAP0;
+  var KO_COL_W = 190;
+
+  function knockoutChampion(event) {
+    if (event.status !== 'done' || !event.rounds.length) return null;
+    var finalMatch = event.rounds[event.rounds.length - 1].matches[0];
+    if (!finalMatch || finalMatch.scoreA == null || finalMatch.scoreB == null) return null;
+    var winnerId = finalMatch.scoreA > finalMatch.scoreB ? finalMatch.teamA[0] : finalMatch.teamB[0];
+    return winnerId ? playerName(event.players, winnerId) : null;
+  }
+
   function renderKnockoutRounds(event) {
     var html = '';
+    var champion = knockoutChampion(event);
+    if (champion) {
+      html += '<div class="ko-champ-banner">🏆 Champion: ' + esc(champion) + '</div>';
+    }
+    html += '<div class="ko-bracket-scroll"><div class="ko-bracket">';
     event.rounds.forEach(function (round, ri) {
       var competitors = round.matches.length * 2;
       var isFirstRound = ri === 0;
-      html += '<div class="round-block"><h2 class="round-title">' + esc(knockoutRoundName(competitors)) + '</h2>';
+      var pitch = KO_UNIT * Math.pow(2, ri);
+      var paddingTop = pitch / 2 - KO_CARD_H / 2;
+      var gap = pitch - KO_CARD_H;
+      html += '<div class="ko-col" style="width:' + KO_COL_W + 'px">';
+      html += '<div class="ko-col-title">' + esc(knockoutRoundName(competitors)) + '</div>';
+      html += '<div class="ko-col-body" style="padding-top:' + paddingTop + 'px; gap:' + gap + 'px">';
       round.matches.forEach(function (m) {
         html += renderKnockoutMatch(event, m, isFirstRound);
       });
-      html += '</div>';
+      html += '</div></div>';
     });
+    html += '</div></div>';
     if (event.thirdPlaceMatch) {
-      html += '<div class="round-block"><h2 class="round-title">3rd Place</h2>' + renderKnockoutMatch(event, event.thirdPlaceMatch, false) + '</div>';
+      html +=
+        '<div class="ko-third-wrap"><div class="ko-third-label">🥉 3rd Place Playoff</div>' +
+        '<div style="width:' + KO_COL_W + 'px">' + renderKnockoutMatch(event, event.thirdPlaceMatch, false) + '</div></div>';
     }
     els.roundsPane.innerHTML = html;
   }
