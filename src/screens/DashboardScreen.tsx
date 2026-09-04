@@ -313,6 +313,7 @@ export function DashboardScreen() {
                   <Text style={styles.syncPillText}>Sync</Text>
                 </Pressable>
               )}
+              {event.status === 'live' && <IconButton name="shuffle-outline" size={38} onPress={onReshuffle} />}
               <IconButton name="ellipsis-horizontal" size={38} onPress={() => nav.navigate('EditEvent', { eventId: event.id })} />
             </View>
           </View>
@@ -539,10 +540,6 @@ export function DashboardScreen() {
                   <Pressable style={styles.actionBtn} onPress={onAddRounds}>
                     <Ionicons name="add-circle-outline" size={16} color={colors.lime} />
                     <Text style={styles.actionText}>Add rounds</Text>
-                  </Pressable>
-                  <Pressable style={styles.actionBtn} onPress={onReshuffle}>
-                    <Ionicons name="shuffle-outline" size={16} color={colors.lime} />
-                    <Text style={styles.actionText}>Reshuffle</Text>
                   </Pressable>
                   <Pressable style={styles.actionBtn} onPress={() => setAddPlayerVisible(true)}>
                     <Ionicons name="person-add-outline" size={16} color={colors.lime} />
