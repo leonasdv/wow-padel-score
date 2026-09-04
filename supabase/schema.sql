@@ -111,16 +111,75 @@ as $$
   returning true;
 $$;
 
--- get_shared_event's return row grew an input_source column — return-type changes need a drop too.
+-- get_shared_event's return row grew input_source, then pending_version — return-type changes need a drop too.
 drop function if exists public.get_shared_event(text);
 
+-- Read path: overlays any scores still sitting in the web-submission queue onto the stored
+-- payload before returning it, purely for this read — nothing is written back here. Without this,
+-- a viewer only sees a web-submitted score once the organizer's app has actually run, pulled the
+-- queue, and pushed a new payload; this lets every viewer (web included) see the raw number the
+-- moment it's submitted, while standings and round-advancement still wait for the app's real pass
+-- (this only patches the two score fields, it doesn't re-run any scoring/standings logic).
 create or replace function public.get_shared_event(p_share_id text)
-returns table(payload jsonb, updated_at timestamptz, input_source text)
-language sql
+returns table(payload jsonb, updated_at timestamptz, input_source text, pending_version bigint)
+language plpgsql
 security definer
 set search_path = public
 as $$
-  select payload, updated_at, input_source from shared_events where share_id = p_share_id;
+declare
+  v_payload jsonb;
+  v_updated_at timestamptz;
+  v_input_source text;
+  v_pending_version bigint;
+  v_sub record;
+  v_round_idx int;
+  v_match_idx int;
+  v_field text;
+begin
+  select se.payload, se.updated_at, se.input_source
+  into v_payload, v_updated_at, v_input_source
+  from shared_events se
+  where se.share_id = p_share_id;
+
+  if v_payload is null then
+    return;
+  end if;
+
+  select coalesce(max(s.id), 0) into v_pending_version
+  from shared_event_score_submissions s
+  where s.share_id = p_share_id;
+
+  for v_sub in
+    select * from shared_event_score_submissions
+    where share_id = p_share_id
+    order by id asc
+  loop
+    v_round_idx := null;
+    select ord.idx - 1 into v_round_idx
+    from jsonb_array_elements(v_payload->'rounds') with ordinality as ord(round, idx)
+    where (ord.round->>'index')::int = v_sub.round_index
+    limit 1;
+
+    if v_round_idx is not null then
+      v_match_idx := null;
+      select ord.idx - 1 into v_match_idx
+      from jsonb_array_elements(v_payload#>array['rounds', v_round_idx::text, 'matches']) with ordinality as ord(m, idx)
+      where ord.m->>'courtId' = v_sub.court_id
+      limit 1;
+
+      if v_match_idx is not null then
+        v_field := case when v_sub.team = 'A' then 'scoreA' else 'scoreB' end;
+        v_payload := jsonb_set(
+          v_payload,
+          array['rounds', v_round_idx::text, 'matches', v_match_idx::text, v_field],
+          to_jsonb(v_sub.value)
+        );
+      end if;
+    end if;
+  end loop;
+
+  return query select v_payload, v_updated_at, v_input_source, v_pending_version;
+end;
 $$;
 
 -- Organizer-only (edit_token gated): flips which side is allowed to submit scores.

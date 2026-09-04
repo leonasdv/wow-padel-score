@@ -24,6 +24,7 @@
   var editorToken = params.get('editor');
   var lastUpdatedAt = null;
   var lastInputSource = null;
+  var lastPendingVersion = null;
   var hasShownContent = false;
   var activeTab = 'rounds';
   var currentEvent = null; // last-rendered payload — read by the score-tap handler
@@ -110,11 +111,14 @@
       var row = Array.isArray(rows) ? rows[0] : rows;
       if (!row || !row.payload) { showState('notFound'); return; }
       // input_source can change without updated_at moving (a mode flip alone doesn't touch the
-      // payload), so both are checked — otherwise a toggle to/from web input could go unnoticed.
-      if (row.updated_at === lastUpdatedAt && row.input_source === lastInputSource) return;
+      // payload), and pending_version can advance without either of those moving too (a new score
+      // just submitted from this same link, overlaid in by get_shared_event but not yet applied
+      // by the organizer's app) — all three are checked so none of those changes go unnoticed.
+      if (row.updated_at === lastUpdatedAt && row.input_source === lastInputSource && row.pending_version === lastPendingVersion) return;
       render(row.payload, row.updated_at, row.input_source); // may throw on unexpected data shapes
       lastUpdatedAt = row.updated_at;
       lastInputSource = row.input_source;
+      lastPendingVersion = row.pending_version;
       hasShownContent = true;
       showState('content');
     } catch (err) {
