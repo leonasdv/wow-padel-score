@@ -133,11 +133,12 @@ export function DashboardScreen() {
   const currentRound: Round | undefined = event.rounds.find((r) => r.index === event.currentRoundIndex);
   const allScored = currentRound ? currentRound.matches.every((m) => m.scoreA != null && m.scoreB != null) : false;
   const isLastRound = event.currentRoundIndex >= event.totalRoundsEstimate;
-  // While the organizer has handed score entry to the web link, the app stays read-only for the
-  // live round specifically — that's the one thing the web link can also write to, so this is what
-  // keeps there from ever being two writers touching the same match at once. Past rounds (always a
-  // correction, never something the web link can submit to) stay editable from the app regardless.
-  const scoreEntryLockedToWeb = event.status === 'live' && event.shareInputSource === 'web';
+  // The web link is never the *only* place scores can be entered — the app can always edit or
+  // clear a score too, toggle or no toggle. That's a deliberate choice: whichever side writes last
+  // wins for that one match, and the organizer's phone is trusted to know when that's fine. The
+  // toggle only decides where the web link itself is allowed to submit from; it was never meant to
+  // lock the app out of its own event.
+  const inputIsWeb = event.shareInputSource === 'web';
 
   const onSyncNow = async () => {
     setSyncBusy(true);
@@ -149,15 +150,6 @@ export function DashboardScreen() {
   };
 
   const openEdit = (m: Match, team: 'A' | 'B', roundIndex: number) => {
-    if (roundIndex === event.currentRoundIndex && scoreEntryLockedToWeb) {
-      Alert.alert(
-        'Score entry is on the web link',
-        'This event is currently taking scores from the web link. Switch back to "This app" in Edit event → Score entry to enter scores here instead.'
-      );
-      return;
-    }
-    // Past-round scores stay editable at any time — including after the event ends — so a
-    // correction always propagates into standings/results.
     const cur = team === 'A' ? m.scoreA : m.scoreB;
     setEdit({ round: roundIndex, courtId: m.courtId, team });
     setBuffer(cur != null ? String(cur) : '');
@@ -179,7 +171,14 @@ export function DashboardScreen() {
   const clearMatchScore = () => {
     if (!edit) return;
     const { round: roundIndex, courtId } = edit;
-    Alert.alert('Clear this score?', 'Both scores for this match go back to unscored.', [
+    const willRewind = !(roundIndex >= event.currentRoundIndex && event.status === 'live');
+    const isAppendedFromStandings = event.format === 'team_mexicano' || isRankingBased(event.format);
+    const message = !willRewind
+      ? 'Both scores for this match go back to unscored.'
+      : isAppendedFromStandings
+        ? `Both scores go back to unscored, and Round ${roundIndex} becomes live again — every round after it will be regenerated once you replay through, since their pairings were based on the score you're clearing.`
+        : `Both scores go back to unscored, and Round ${roundIndex} becomes live again.`;
+    Alert.alert('Clear this score?', message, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Clear',
@@ -307,7 +306,7 @@ export function DashboardScreen() {
                 {event.status === 'live' && <LivePulseDot />}
                 <Text style={[styles.liveText, event.status !== 'live' && styles.endedText]}>{event.status === 'live' ? 'LIVE' : 'ENDED'}</Text>
               </Pressable>
-              {scoreEntryLockedToWeb && (
+              {inputIsWeb && (
                 <Pressable style={styles.syncPill} onPress={onSyncNow} disabled={syncBusy}>
                   <Ionicons name={syncBusy ? 'hourglass-outline' : 'sync-outline'} size={13} color={colors.blueText} />
                   <Text style={styles.syncPillText}>Sync</Text>
@@ -451,9 +450,9 @@ export function DashboardScreen() {
                       const done = m.scoreA != null && m.scoreB != null;
                       const winA = done && (m.scoreA as number) > (m.scoreB as number);
                       const winB = done && (m.scoreB as number) > (m.scoreA as number);
-                      const lockedHere = isCurrentRound && scoreEntryLockedToWeb;
-                      // Only the active round is LIVE (or WEB, while score entry is handed to the web link); rounds ahead of it are WAITING.
-                      const status = done ? 'DONE' : isCurrentRound ? (lockedHere ? 'WEB' : 'LIVE') : 'WAITING';
+                      const webAlsoWritesHere = isCurrentRound && inputIsWeb;
+                      // Only the active round is LIVE (or WEB, when the web link can also submit scores for it — the app can still enter/clear here too); rounds ahead of it are WAITING.
+                      const status = done ? 'DONE' : isCurrentRound ? (webAlsoWritesHere ? 'WEB' : 'LIVE') : 'WAITING';
                       const statusStyle =
                         status === 'DONE'
                           ? { bg: 'rgba(198,234,59,.14)', fg: colors.lime, border: colors.hairline }
@@ -494,7 +493,7 @@ export function DashboardScreen() {
                               style={[
                                 styles.scoreBox,
                                 { backgroundColor: boxA.backgroundColor, borderColor: boxA.borderColor },
-                                lockedHere && styles.scoreBoxLocked,
+                                webAlsoWritesHere && styles.scoreBoxShared,
                               ]}
                             >
                               <Text style={[styles.scoreText, { color: boxA.color }]}>{m.scoreA ?? '–'}</Text>
@@ -505,7 +504,7 @@ export function DashboardScreen() {
                               style={[
                                 styles.scoreBox,
                                 { backgroundColor: boxB.backgroundColor, borderColor: boxB.borderColor },
-                                lockedHere && styles.scoreBoxLocked,
+                                webAlsoWritesHere && styles.scoreBoxShared,
                               ]}
                             >
                               <Text style={[styles.scoreText, { color: boxB.color }]}>{m.scoreB ?? '–'}</Text>
@@ -785,7 +784,7 @@ const styles = StyleSheet.create({
   playerLine: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, flexShrink: 1 },
   playerEditIcon: { opacity: 0.6 },
   scoreBox: { width: 58, height: 58, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  scoreBoxLocked: { borderStyle: 'dashed', opacity: 0.55 },
+  scoreBoxShared: { borderStyle: 'dashed' },
   scoreText: { fontSize: 28, fontWeight: '800', fontVariant: ['tabular-nums'] },
   vs: { fontSize: 13, fontWeight: '800', color: colors.textFaint },
   sitOutText: { fontSize: 12, color: colors.textFaint, textAlign: 'center', marginTop: 4 },

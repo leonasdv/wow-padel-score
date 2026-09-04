@@ -913,18 +913,38 @@ export function setScore(event: WowEvent, roundIndex: number, courtId: string, t
 
 /**
  * Clears a match back to unscored (both sides null) — the only way to walk an entry back, since
- * setScore/applyScore only ever overwrite with a new number. A pure correction like editing any
- * past round's score: never touches currentRoundIndex or status, even for the current round.
+ * setScore/applyScore only ever overwrite with a new number.
+ *
+ * If the cleared match belongs to the current live round (or a round ahead of it), this is a pure
+ * correction: nothing else changes. But if it belongs to an *earlier* round — one that already got
+ * left behind by auto-advance, or by the event finishing — leaving `currentRoundIndex` where it
+ * was would strand that round "completed" with a gap in it. So this rewinds the tournament back to
+ * the corrected round instead: it becomes live again (event status included, if the event had
+ * finished), and every round after it is marked not-completed.
+ *
+ * For formats whose rounds get appended one at a time from live standings (Mexicano / Mixicano /
+ * Team Mexicano), every round after the corrected one is also discarded outright, not just marked
+ * incomplete — their pairings were built from standings that included the score being erased, so
+ * they're stale; replaying "End Round" from here regenerates them fresh. Fixed-schedule formats
+ * (Americano / Mix Americano / Team Americano) keep their later rounds as-is, since those pairings
+ * were fixed at creation and never depended on scores.
  */
 export function clearScore(event: WowEvent, roundIndex: number, courtId: string): WowEvent {
-  const rounds = event.rounds.map((r) => {
-    if (r.index !== roundIndex) return r;
-    return {
-      ...r,
-      matches: r.matches.map((m) => (m.courtId === courtId ? { ...m, scoreA: null, scoreB: null } : m)),
-    };
-  });
-  return { ...event, rounds };
+  const cleared = event.rounds.map((r) =>
+    r.index === roundIndex
+      ? { ...r, matches: r.matches.map((m) => (m.courtId === courtId ? { ...m, scoreA: null, scoreB: null } : m)) }
+      : r
+  );
+
+  const isAppendedFromStandings = event.format === 'team_mexicano' || isRankingBased(event.format);
+  const isAhead = roundIndex >= event.currentRoundIndex;
+  if (isAhead && event.status === 'live') {
+    return { ...event, rounds: cleared };
+  }
+
+  const kept = isAppendedFromStandings ? cleared.filter((r) => r.index <= roundIndex) : cleared;
+  const rounds = kept.map((r) => (r.index >= roundIndex ? { ...r, completed: false } : r));
+  return { ...event, rounds, currentRoundIndex: roundIndex, status: 'live' };
 }
 
 /**
