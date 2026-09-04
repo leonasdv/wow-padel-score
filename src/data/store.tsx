@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { pullPendingScores, pushEventUpdate } from '../lib/share';
 import type { WowEvent } from '../types';
 
@@ -14,6 +15,12 @@ interface EventsContextValue {
   addEvent: (event: WowEvent) => Promise<void>;
   updateEvent: (id: string, updater: (event: WowEvent) => WowEvent) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
+  /** Pulls scores submitted from the web link for one event right now, instead of waiting for the
+   * background poll — used for a manual "sync now" action and whenever the app comes to the
+   * foreground (a `setInterval` only runs while the app is actually in the foreground, so without
+   * this, scores entered while the organizer's phone was locked/backgrounded wouldn't show up
+   * until the interval happened to tick again after reopening). No-op if nothing's pending. */
+  syncSharedScores: (id: string) => Promise<void>;
 }
 
 const EventsContext = createContext<EventsContextValue | null>(null);
@@ -78,29 +85,67 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
     eventsRef.current = events;
   }, [events]);
 
-  // While an event is toggled to web score entry, the organizer's own phone needs to pull scores
-  // submitted from that link back in — sync is otherwise push-only (see pushEventUpdate).
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const candidates = eventsRef.current.filter((e) => e.shareId && e.shareInputSource === 'web' && e.status === 'live');
-      for (const ev of candidates) {
-        try {
-          const updated = await pullPendingScores(ev);
-          if (updated === ev) continue; // nothing was pending
-          const latest = eventsRef.current;
-          await persist(latest.map((e) => (e.id === ev.id ? updated : e)));
-          pushEventUpdate(updated).catch(() => {});
-        } catch {
-          // Best-effort — picked up again on the next tick.
-        }
+  // Pulls one event's queued web scores and folds them in, if any are waiting. Shared by the
+  // background interval, the app-foreground trigger, and the manual "sync now" action below —
+  // one implementation so they can't drift apart.
+  const syncOne = useCallback(
+    async (ev: WowEvent) => {
+      try {
+        const updated = await pullPendingScores(ev);
+        if (updated === ev) return; // nothing was pending
+        const latest = eventsRef.current;
+        await persist(latest.map((e) => (e.id === ev.id ? updated : e)));
+        pushEventUpdate(updated).catch(() => {});
+      } catch {
+        // Best-effort — picked up again on the next tick / next foreground / next manual sync.
       }
-    }, WEB_SCORE_POLL_MS);
+    },
+    [persist]
+  );
+
+  const syncAllWebEvents = useCallback(async () => {
+    const candidates = eventsRef.current.filter((e) => e.shareId && e.shareInputSource === 'web' && e.status === 'live');
+    for (const ev of candidates) {
+      await syncOne(ev);
+    }
+  }, [syncOne]);
+
+  const syncSharedScores = useCallback(
+    async (id: string) => {
+      const ev = eventsRef.current.find((e) => e.id === id);
+      if (ev) await syncOne(ev);
+    },
+    [syncOne]
+  );
+
+  // While an event is toggled to web score entry, the organizer's own phone needs to pull scores
+  // submitted from that link back in — sync is otherwise push-only (see pushEventUpdate). This
+  // interval only actually runs while the app is in the foreground (React Native suspends JS
+  // timers in the background), which is exactly why the AppState listener below also matters.
+  useEffect(() => {
+    const interval = setInterval(syncAllWebEvents, WEB_SCORE_POLL_MS);
     return () => clearInterval(interval);
-  }, [persist]);
+  }, [syncAllWebEvents]);
+
+  // Catches up immediately when the app is opened or resumed from the background — otherwise
+  // whatever was submitted on web while the phone was locked/backgrounded (when the interval
+  // above wasn't running at all) would sit unsynced until the interval happened to tick again.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncAllWebEvents();
+    });
+    return () => sub.remove();
+  }, [syncAllWebEvents]);
+
+  // Also catch up right after a cold start, once the roster's actually loaded — AppState's
+  // 'change' listener above only fires on a later transition, not the app's very first launch.
+  useEffect(() => {
+    if (!loading) syncAllWebEvents();
+  }, [loading, syncAllWebEvents]);
 
   const value = useMemo(
-    () => ({ events, loading, getEvent, addEvent, updateEvent, deleteEvent }),
-    [events, loading, getEvent, addEvent, updateEvent, deleteEvent]
+    () => ({ events, loading, getEvent, addEvent, updateEvent, deleteEvent, syncSharedScores }),
+    [events, loading, getEvent, addEvent, updateEvent, deleteEvent, syncSharedScores]
   );
 
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>;

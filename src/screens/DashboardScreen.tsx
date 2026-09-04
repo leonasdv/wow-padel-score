@@ -18,6 +18,7 @@ import {
   addPlayerMidEvent,
   advanceRound,
   applyScore,
+  clearScore,
   computeStandings,
   describeTiebreak,
   extendRounds,
@@ -66,7 +67,7 @@ function matchesForPlayer(rounds: Round[], playerId: string): PlayerRoundEntry[]
 export function DashboardScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<R>();
-  const { getEvent, updateEvent } = useEvents();
+  const { getEvent, updateEvent, syncSharedScores } = useEvents();
   const event = getEvent(route.params.eventId);
 
   const [tab, setTab] = useState<'rounds' | 'standings'>(route.params.tab ?? 'rounds');
@@ -78,6 +79,7 @@ export function DashboardScreen() {
   const [tiebreakInfo, setTiebreakInfo] = useState<{ playerName: string; points: number; entries: TiebreakEntry[] } | null>(null);
   const [roundsSearch, setRoundsSearch] = useState('');
   const [shareBusy, setShareBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
 
   const searchResults = useMemo(() => {
     const q = roundsSearch.trim().toLowerCase();
@@ -137,6 +139,15 @@ export function DashboardScreen() {
   // correction, never something the web link can submit to) stay editable from the app regardless.
   const scoreEntryLockedToWeb = event.status === 'live' && event.shareInputSource === 'web';
 
+  const onSyncNow = async () => {
+    setSyncBusy(true);
+    try {
+      await syncSharedScores(event.id);
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
   const openEdit = (m: Match, team: 'A' | 'B', roundIndex: number) => {
     if (roundIndex === event.currentRoundIndex && scoreEntryLockedToWeb) {
       Alert.alert(
@@ -163,6 +174,22 @@ export function DashboardScreen() {
     const { round: roundIndex, courtId, team } = edit;
     await updateEvent(event.id, (e) => applyScore(e, roundIndex, courtId, team, value));
     closeEdit();
+  };
+
+  const clearMatchScore = () => {
+    if (!edit) return;
+    const { round: roundIndex, courtId } = edit;
+    Alert.alert('Clear this score?', 'Both scores for this match go back to unscored.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          await updateEvent(event.id, (e) => clearScore(e, roundIndex, courtId));
+          closeEdit();
+        },
+      },
+    ]);
   };
 
   const onEndRound = async () => {
@@ -280,6 +307,12 @@ export function DashboardScreen() {
                 {event.status === 'live' && <LivePulseDot />}
                 <Text style={[styles.liveText, event.status !== 'live' && styles.endedText]}>{event.status === 'live' ? 'LIVE' : 'ENDED'}</Text>
               </Pressable>
+              {scoreEntryLockedToWeb && (
+                <Pressable style={styles.syncPill} onPress={onSyncNow} disabled={syncBusy}>
+                  <Ionicons name={syncBusy ? 'hourglass-outline' : 'sync-outline'} size={13} color={colors.blueText} />
+                  <Text style={styles.syncPillText}>Sync</Text>
+                </Pressable>
+              )}
               <IconButton name="ellipsis-horizontal" size={38} onPress={() => nav.navigate('EditEvent', { eventId: event.id })} />
             </View>
           </View>
@@ -688,6 +721,7 @@ export function DashboardScreen() {
           onDelete={() => setBuffer((b) => b.slice(0, -1))}
           onConfirm={confirmScore}
           onClose={closeEdit}
+          onClear={clearMatchScore}
         />
 
         <TiebreakInfoModal
@@ -729,6 +763,8 @@ const styles = StyleSheet.create({
   liveText: { fontSize: 12, fontWeight: '800', color: colors.lime, letterSpacing: 0.5 },
   endedPill: { backgroundColor: colors.white06, borderColor: colors.hairlineStrong },
   endedText: { color: colors.textMuted },
+  syncPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 11, borderRadius: 99, backgroundColor: colors.blueTint, borderWidth: 1, borderColor: colors.blueTintBorder },
+  syncPillText: { fontSize: 12, fontWeight: '800', color: colors.blueText, letterSpacing: 0.3 },
   title: { marginTop: 14, fontSize: 23, fontWeight: '900', letterSpacing: -0.6, color: colors.textPrimary },
   meta: { fontSize: 13, color: colors.textMuted, fontWeight: '600', marginTop: 3 },
   tabsWrap: { paddingHorizontal: 22, paddingTop: 16 },

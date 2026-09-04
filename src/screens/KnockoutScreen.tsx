@@ -12,7 +12,7 @@ import { ScoreKeypad } from '../components/ScoreKeypad';
 import { WowLogo } from '../components/WowLogo';
 import { useEvents } from '../data/store';
 import { publishEvent, shareUrlFor } from '../lib/share';
-import { knockoutRoundName, replaceParticipant, setKnockoutScore, setThirdPlaceScore } from '../lib/tournament';
+import { clearKnockoutScore, clearThirdPlaceScore, knockoutRoundName, replaceParticipant, setKnockoutScore, setThirdPlaceScore } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, radius } from '../theme/tokens';
 import type { Match } from '../types';
@@ -76,6 +76,34 @@ export function KnockoutScreen() {
     }
     setEdit(null);
     setBuffer('');
+  };
+
+  const clearMatchScore = () => {
+    if (!edit) return;
+    const { roundIndex, matchIndex } = edit;
+    const isThirdPlace = roundIndex === -1;
+    Alert.alert(
+      'Clear this score?',
+      isThirdPlace
+        ? 'Both scores for the 3rd-place playoff go back to unscored.'
+        : "Both scores go back to unscored — if this match's winner had already advanced, that later slot clears too.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            if (isThirdPlace) {
+              await updateEvent(event.id, (e) => clearThirdPlaceScore(e));
+            } else {
+              await updateEvent(event.id, (e) => clearKnockoutScore(e, roundIndex, matchIndex));
+            }
+            setEdit(null);
+            setBuffer('');
+          },
+        },
+      ]
+    );
   };
 
   const openRename = (id: string) => setRename({ id, text: nameOf(id) ?? '' });
@@ -300,6 +328,7 @@ export function KnockoutScreen() {
             setEdit(null);
             setBuffer('');
           }}
+          onClear={clearMatchScore}
         />
 
         <Modal visible={!!rename} transparent animationType="fade" onRequestClose={() => setRename(null)}>

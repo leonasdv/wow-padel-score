@@ -16,11 +16,13 @@ interface Props {
   onDelete: () => void;
   onConfirm: () => void;
   onClose: () => void;
+  /** Resets the match back to unscored (both sides). Omit to hide the "Clear score" action entirely. */
+  onClear?: () => void;
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'];
 
-export function ScoreKeypad({ visible, title, scoringMode, pot, buffer, oppLabel, onDigit, onDelete, onConfirm, onClose }: Props) {
+export function ScoreKeypad({ visible, title, scoringMode, pot, buffer, oppLabel, onDigit, onDelete, onConfirm, onClose, onClear }: Props) {
   const insets = useSafeAreaInsets();
   const max = scoringMode === 'total' ? pot : 99;
   const bufNum = buffer === '' ? null : Math.min(Number(buffer), max);
@@ -34,9 +36,16 @@ export function ScoreKeypad({ visible, title, scoringMode, pot, buffer, oppLabel
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 18 }]}>
         <View style={styles.grabber} />
-        <Text style={styles.title}>
-          {title} · {scoringMode === 'total' ? `Total Score, pot ${pot}` : 'Free Entry'}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>
+            {title} · {scoringMode === 'total' ? `Total Score, pot ${pot}` : 'Free Entry'}
+          </Text>
+          {onClear && (
+            <Pressable onPress={onClear} hitSlop={8}>
+              <Text style={styles.clearText}>Clear score</Text>
+            </Pressable>
+          )}
+        </View>
         <View style={styles.valuesRow}>
           <View style={styles.valueBox}>
             <Text style={styles.valueText}>{buffer === '' ? '–' : buffer}</Text>
@@ -101,7 +110,9 @@ const styles = StyleSheet.create({
     borderColor: colors.hairlineStrong,
   },
   grabber: { width: 44, height: 5, borderRadius: 99, backgroundColor: 'rgba(255,255,255,.18)', alignSelf: 'center', marginBottom: 16 },
-  title: { fontSize: 13, fontWeight: '700', color: colors.textMuted, marginBottom: 12 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12 },
+  title: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.textMuted },
+  clearText: { fontSize: 12, fontWeight: '800', color: colors.amber },
   valuesRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   valueBox: {
     flex: 1,

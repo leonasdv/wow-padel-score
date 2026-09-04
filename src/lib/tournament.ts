@@ -912,6 +912,22 @@ export function setScore(event: WowEvent, roundIndex: number, courtId: string, t
 }
 
 /**
+ * Clears a match back to unscored (both sides null) — the only way to walk an entry back, since
+ * setScore/applyScore only ever overwrite with a new number. A pure correction like editing any
+ * past round's score: never touches currentRoundIndex or status, even for the current round.
+ */
+export function clearScore(event: WowEvent, roundIndex: number, courtId: string): WowEvent {
+  const rounds = event.rounds.map((r) => {
+    if (r.index !== roundIndex) return r;
+    return {
+      ...r,
+      matches: r.matches.map((m) => (m.courtId === courtId ? { ...m, scoreA: null, scoreB: null } : m)),
+    };
+  });
+  return { ...event, rounds };
+}
+
+/**
  * Enters one score and auto-advances the round if that was its last missing score — the single
  * place this "score, then maybe advance" rule lives, shared by the app's own keypad and by scores
  * pulled in from the web score-entry link, so the two paths can never drift apart. Editing a round
@@ -1087,6 +1103,12 @@ export function setThirdPlaceScore(event: WowEvent, team: 'A' | 'B', value: numb
   return recomputeKnockout({ ...event, thirdPlaceMatch: tp });
 }
 
+/** Clears the 3rd-place playoff back to unscored. */
+export function clearThirdPlaceScore(event: WowEvent): WowEvent {
+  if (!event.thirdPlaceMatch) return event;
+  return recomputeKnockout({ ...event, thirdPlaceMatch: { ...event.thirdPlaceMatch, scoreA: null, scoreB: null } });
+}
+
 export function setKnockoutScore(event: WowEvent, roundIndex: number, matchIndex: number, team: 'A' | 'B', value: number): WowEvent {
   const v = Math.max(0, Math.min(99, value));
   const rounds = event.rounds.map((r) => {
@@ -1097,6 +1119,18 @@ export function setKnockoutScore(event: WowEvent, roundIndex: number, matchIndex
         if (i !== matchIndex) return m;
         return team === 'A' ? { ...m, scoreA: v } : { ...m, scoreB: v };
       }),
+    };
+  });
+  return recomputeKnockout({ ...event, rounds });
+}
+
+/** Clears a bracket match back to unscored — recomputeKnockout cascades this into clearing whichever later slot that match's winner had already filled. */
+export function clearKnockoutScore(event: WowEvent, roundIndex: number, matchIndex: number): WowEvent {
+  const rounds = event.rounds.map((r) => {
+    if (r.index !== roundIndex) return r;
+    return {
+      ...r,
+      matches: r.matches.map((m, i) => (i === matchIndex ? { ...m, scoreA: null, scoreB: null } : m)),
     };
   });
   return recomputeKnockout({ ...event, rounds });
