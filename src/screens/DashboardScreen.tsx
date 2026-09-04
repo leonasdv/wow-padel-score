@@ -131,10 +131,22 @@ export function DashboardScreen() {
   const currentRound: Round | undefined = event.rounds.find((r) => r.index === event.currentRoundIndex);
   const allScored = currentRound ? currentRound.matches.every((m) => m.scoreA != null && m.scoreB != null) : false;
   const isLastRound = event.currentRoundIndex >= event.totalRoundsEstimate;
+  // While the organizer has handed score entry to the web link, the app stays read-only for the
+  // live round specifically — that's the one thing the web link can also write to, so this is what
+  // keeps there from ever being two writers touching the same match at once. Past rounds (always a
+  // correction, never something the web link can submit to) stay editable from the app regardless.
+  const scoreEntryLockedToWeb = event.status === 'live' && event.shareInputSource === 'web';
 
   const openEdit = (m: Match, team: 'A' | 'B', roundIndex: number) => {
-    // Scores are editable on any round, at any time — including past rounds and after the event ends —
-    // so a correction always propagates into standings/results.
+    if (roundIndex === event.currentRoundIndex && scoreEntryLockedToWeb) {
+      Alert.alert(
+        'Score entry is on the web link',
+        'This event is currently taking scores from the web link. Switch back to "This app" in Edit event → Score entry to enter scores here instead.'
+      );
+      return;
+    }
+    // Past-round scores stay editable at any time — including after the event ends — so a
+    // correction always propagates into standings/results.
     const cur = team === 'A' ? m.scoreA : m.scoreB;
     setEdit({ round: roundIndex, courtId: m.courtId, team });
     setBuffer(cur != null ? String(cur) : '');
@@ -405,12 +417,13 @@ export function DashboardScreen() {
                       const done = m.scoreA != null && m.scoreB != null;
                       const winA = done && (m.scoreA as number) > (m.scoreB as number);
                       const winB = done && (m.scoreB as number) > (m.scoreA as number);
-                      // Only the active round is LIVE; rounds ahead of it are WAITING.
-                      const status = done ? 'DONE' : isCurrentRound ? 'LIVE' : 'WAITING';
+                      const lockedHere = isCurrentRound && scoreEntryLockedToWeb;
+                      // Only the active round is LIVE (or WEB, while score entry is handed to the web link); rounds ahead of it are WAITING.
+                      const status = done ? 'DONE' : isCurrentRound ? (lockedHere ? 'WEB' : 'LIVE') : 'WAITING';
                       const statusStyle =
                         status === 'DONE'
                           ? { bg: 'rgba(198,234,59,.14)', fg: colors.lime, border: colors.hairline }
-                          : status === 'LIVE'
+                          : status === 'LIVE' || status === 'WEB'
                             ? { bg: colors.blueTint, fg: colors.blueText, border: colors.blueTintBorder }
                             : { bg: 'rgba(255,180,60,.14)', fg: colors.amber, border: colors.hairline };
                       const boxStyle = (filled: boolean, win: boolean) => ({
@@ -444,14 +457,22 @@ export function DashboardScreen() {
                             </View>
                             <Pressable
                               onPress={() => openEdit(m, 'A', round.index)}
-                              style={[styles.scoreBox, { backgroundColor: boxA.backgroundColor, borderColor: boxA.borderColor }]}
+                              style={[
+                                styles.scoreBox,
+                                { backgroundColor: boxA.backgroundColor, borderColor: boxA.borderColor },
+                                lockedHere && styles.scoreBoxLocked,
+                              ]}
                             >
                               <Text style={[styles.scoreText, { color: boxA.color }]}>{m.scoreA ?? '–'}</Text>
                             </Pressable>
                             <Text style={styles.vs}>vs</Text>
                             <Pressable
                               onPress={() => openEdit(m, 'B', round.index)}
-                              style={[styles.scoreBox, { backgroundColor: boxB.backgroundColor, borderColor: boxB.borderColor }]}
+                              style={[
+                                styles.scoreBox,
+                                { backgroundColor: boxB.backgroundColor, borderColor: boxB.borderColor },
+                                lockedHere && styles.scoreBoxLocked,
+                              ]}
                             >
                               <Text style={[styles.scoreText, { color: boxB.color }]}>{m.scoreB ?? '–'}</Text>
                             </Pressable>
@@ -731,6 +752,7 @@ const styles = StyleSheet.create({
   playerLine: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, flexShrink: 1 },
   playerEditIcon: { opacity: 0.6 },
   scoreBox: { width: 58, height: 58, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  scoreBoxLocked: { borderStyle: 'dashed', opacity: 0.55 },
   scoreText: { fontSize: 28, fontWeight: '800', fontVariant: ['tabular-nums'] },
   vs: { fontSize: 13, fontWeight: '800', color: colors.textFaint },
   sitOutText: { fontSize: 12, color: colors.textFaint, textAlign: 'center', marginTop: 4 },
