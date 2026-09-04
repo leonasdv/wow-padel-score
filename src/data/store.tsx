@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { pushEventUpdate } from '../lib/share';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { pullPendingScores, pushEventUpdate } from '../lib/share';
 import type { WowEvent } from '../types';
 
 const STORAGE_KEY = '@wow_padel_score/events';
+/** How often to check for scores submitted from a web score-entry link — mirrors the web viewer's own poll cadence. */
+const WEB_SCORE_POLL_MS = 5000;
 
 interface EventsContextValue {
   events: WowEvent[];
@@ -67,6 +69,34 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
     },
     [events, persist]
   );
+
+  // Kept fresh on every render so the poll loop below always reads the latest roster, without
+  // needing `events` in its own effect deps (which would tear down and restart the interval —
+  // and, worse, risk operating on a stale snapshot mid-await — every time any event changes).
+  const eventsRef = useRef(events);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
+  // While an event is toggled to web score entry, the organizer's own phone needs to pull scores
+  // submitted from that link back in — sync is otherwise push-only (see pushEventUpdate).
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const candidates = eventsRef.current.filter((e) => e.shareId && e.shareInputSource === 'web' && e.status === 'live');
+      for (const ev of candidates) {
+        try {
+          const updated = await pullPendingScores(ev);
+          if (updated === ev) continue; // nothing was pending
+          const latest = eventsRef.current;
+          await persist(latest.map((e) => (e.id === ev.id ? updated : e)));
+          pushEventUpdate(updated).catch(() => {});
+        } catch {
+          // Best-effort — picked up again on the next tick.
+        }
+      }
+    }, WEB_SCORE_POLL_MS);
+    return () => clearInterval(interval);
+  }, [persist]);
 
   const value = useMemo(
     () => ({ events, loading, getEvent, addEvent, updateEvent, deleteEvent }),

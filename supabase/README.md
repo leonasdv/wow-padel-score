@@ -9,12 +9,20 @@ Open your Supabase project → **SQL Editor** → **New query**, paste the conte
 
 - `shared_events` — a table with Row Level Security enabled and **no policies**, so the
   public anon key can never read or list it directly.
-- Four `SECURITY DEFINER` functions (`create_shared_event`, `update_shared_event`,
-  `unpublish_shared_event`, `get_shared_event`) that the app and the public web viewer call
-  instead. They're the only way in: publishing/updating requires knowing the private
-  `edit_token`, reading requires knowing the public `share_id` embedded in the link.
+- `shared_event_score_submissions` — same lockdown; an append-only queue of scores submitted
+  from the web score-entry link, drained by the app.
+- A set of `SECURITY DEFINER` functions that the app and the public web pages call instead of
+  touching the tables directly. Two secret tokens gate them, kept deliberately separate:
+  - `edit_token` — private, held only by the organizer's app. Publishing, updating, unpublishing,
+    toggling who's allowed to enter scores, and draining the score queue all require it.
+  - `editor_token` — meant to be handed out on a separate "Score entry" link. Can only submit
+    individual match scores (`submit_shared_score`), and only while the organizer has toggled
+    that event to web input.
+  - Plain reading (`get_shared_event`) only needs the public `share_id` embedded in the viewer
+    link.
 
-Safe to re-run — everything uses `create or replace` / `if not exists`.
+Safe to re-run any time this file changes — every statement is idempotent, including against a
+project that already has the previous version of this schema.
 
 ## 2. Get your Project URL and anon key
 
@@ -38,6 +46,6 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 ## 4. Wire it into the public web viewer
 
 Edit `web/config.js` with the same URL + anon key. Unlike `.env`, this file **is** committed
-and deployed publicly — that's expected: the anon key here only unlocks the four RPC
-functions above, which enforce their own authorization (share_id/edit_token), so there's
-nothing sensitive in it.
+and deployed publicly — that's expected: the anon key here only unlocks the RPC functions
+above, which enforce their own authorization (share_id / edit_token / editor_token), so
+there's nothing sensitive in it.

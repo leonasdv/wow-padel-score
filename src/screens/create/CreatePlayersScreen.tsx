@@ -11,7 +11,7 @@ import { ScreenBackground, StepHeader } from '../../components/Misc';
 import { useDraft } from '../../data/draft';
 import { useEvents } from '../../data/store';
 import { makeId } from '../../lib/id';
-import { estimateRoundsForMatchesPerPlayer, knockoutRoundName, matchesPerPlayerIsFeasible, startEvent } from '../../lib/tournament';
+import { estimateRoundsForMatchesPerPlayer, isTeamFormat, knockoutRoundName, matchesPerPlayerIsFeasible, startEvent } from '../../lib/tournament';
 import type { RootStackParamList } from '../../navigation/types';
 import { colors, radius } from '../../theme/tokens';
 import type { Gender, WowEvent } from '../../types';
@@ -25,7 +25,7 @@ export function CreatePlayersScreen() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const isTeamMode = draft.format === 'team_americano';
+  const isTeamMode = isTeamFormat(draft.format);
   const isKnockout = draft.format === 'knockout';
   const showGender = !isTeamMode && !isKnockout;
 

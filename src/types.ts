@@ -6,6 +6,7 @@ export type Format =
   | 'mixicano'
   | 'mix_americano'
   | 'team_americano'
+  | 'team_mexicano'
   | 'knockout';
 
 export type ScoringMode = 'total' | 'free';
@@ -51,7 +52,7 @@ export interface WowEvent {
   pot: number; // used when scoringMode === 'total'
   courts: Court[];
   players: Player[];
-  fixedTeams?: FixedTeam[]; // team_americano only
+  fixedTeams?: FixedTeam[]; // team_americano / team_mexicano only
   thirdPlaceMatch?: Match; // knockout only — semifinal losers play for 3rd
   rounds: Round[];
   totalRoundsEstimate: number;
@@ -64,7 +65,9 @@ export interface WowEvent {
   resultPodiumPosition?: 'top' | 'bottom';
   resultTemplate?: 'list' | 'podium' | 'table';
   shareId?: string; // set once the event is published to the public live share link
-  editToken?: string; // private token authorizing updates to the published copy — never shown to users
+  editToken?: string; // private token authorizing full updates to the published copy — never shown to users
+  editorToken?: string; // narrower token for the web "score entry" link — private, never shown to users
+  shareInputSource?: 'app' | 'web'; // who's currently allowed to submit scores for the published copy — defaults to 'app'
 }
 
 export interface Standing {
@@ -100,6 +103,11 @@ export const FORMAT_META: Record<Format, { name: string; abbr: string; desc: str
     name: 'Team Americano',
     abbr: 'TA',
     desc: 'Fixed teams face every other team. Team points.',
+  },
+  team_mexicano: {
+    name: 'Team Mexicano',
+    abbr: 'TM',
+    desc: 'Fixed teams ranked each round — winners climb to the top court, losers drop to the bottom.',
   },
   knockout: {
     name: 'Knockout',

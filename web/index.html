@@ -39,6 +39,7 @@
       </nav>
 
       <main>
+        <div id="editorBanner" hidden></div>
         <section id="roundsPane"></section>
         <section id="standingsPane" hidden></section>
       </main>
@@ -46,6 +47,18 @@
       <footer class="footer">
         <span id="updatedAt"></span> · WOWPadel Score
       </footer>
+    </div>
+  </div>
+
+  <div class="score-modal-backdrop" id="scoreModalOverlay" hidden>
+    <div class="score-modal">
+      <p class="score-modal-title" id="scoreModalTitle">Enter score</p>
+      <input class="score-modal-input" id="scoreModalInput" type="number" inputmode="numeric" min="0" />
+      <p class="score-modal-error" id="scoreModalError" hidden></p>
+      <div class="score-modal-actions">
+        <button class="score-modal-btn cancel" id="scoreModalCancelBtn" type="button">Cancel</button>
+        <button class="score-modal-btn confirm" id="scoreModalConfirmBtn" type="button">Save</button>
+      </div>
     </div>
   </div>
 

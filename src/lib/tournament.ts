@@ -38,6 +38,11 @@ export function isRankingBased(format: Format): boolean {
   return format === 'mexicano' || format === 'mixicano';
 }
 
+/** Fixed-roster formats where each roster entry already represents a complete team. */
+export function isTeamFormat(format: Format): boolean {
+  return format === 'team_americano' || format === 'team_mexicano';
+}
+
 /**
  * Picks which players sit out this round, favoring those who have played the fewest matches so far.
  * When `cap` is set, anyone who has already reached it is forced to sit out — regardless of how much
@@ -442,18 +447,61 @@ export function describeTiebreak(standing: Standing, other: Standing, rounds: Ro
   return { criterion: 'tied', ownValue: 0, otherValue: 0, aheadOfOther: false };
 }
 
+/**
+ * Picks the fairest of a quartet's 3 possible 2v2 splits — same-partner and same-opponent history
+ * both penalized, repeat partners weighted far more heavily since staying fresh every round is the
+ * whole point of individual Mexicano (unlike Team Mexicano, whose teams are fixed by design). Ties
+ * default to the conventional rank1&4-vs-rank2&3 split (the widely-documented Mexicano rule) so the
+ * "smart" pick only kicks in when history actually calls for it.
+ */
+function bestQuartetSplit(
+  quartet: [string, string, string, string],
+  partnerCount: Record<string, number>,
+  opponentCount: Record<string, number>
+): { teamA: [string, string]; teamB: [string, string] } {
+  const [r1, r2, r3, r4] = quartet;
+  const options: [[string, string], [string, string]][] = [
+    [[r1, r4], [r2, r3]], // conventional: top+bottom vs the middle two
+    [[r1, r2], [r3, r4]],
+    [[r1, r3], [r2, r4]],
+  ];
+  let best = options[0];
+  let bestScore = Infinity;
+  for (const [teamA, teamB] of options) {
+    const partnerRepeats = (partnerCount[pairKey(...teamA)] ?? 0) + (partnerCount[pairKey(...teamB)] ?? 0);
+    const opponentRepeats =
+      (opponentCount[pairKey(teamA[0], teamB[0])] ?? 0) +
+      (opponentCount[pairKey(teamA[0], teamB[1])] ?? 0) +
+      (opponentCount[pairKey(teamA[1], teamB[0])] ?? 0) +
+      (opponentCount[pairKey(teamA[1], teamB[1])] ?? 0);
+    const score = partnerRepeats * 100 + opponentRepeats;
+    if (score < bestScore) {
+      bestScore = score;
+      best = [teamA, teamB];
+    }
+  }
+  return { teamA: best[0], teamB: best[1] };
+}
+
 function generateRankingRound(
   format: 'mexicano' | 'mixicano',
   players: Player[],
   courts: Court[],
   roundIndex: number,
   standings: Standing[],
+  rounds: Round[],
   matchesPerPlayer?: number
 ): Round {
   const byId = Object.fromEntries(standings.map((s) => [s.player.id, s]));
   const playCount: Record<string, number> = Object.fromEntries(players.map((p) => [p.id, byId[p.id]?.played ?? 0]));
   const capacity = courts.length * 4;
   const pointsOf = (p: Player) => byId[p.id]?.points ?? 0;
+  // Points per match played so far — used (mexicano only) instead of raw points so a recent bye
+  // doesn't bury a player who simply hasn't rotated back onto court as often yet.
+  const rateOf = (p: Player) => {
+    const s = byId[p.id];
+    return s && s.played > 0 ? s.points / s.played : 0;
+  };
 
   if (format === 'mixicano') {
     const { active, sitOuts } = pickSitOuts(players, playCount, capacity, true, matchesPerPlayer);
@@ -483,16 +531,28 @@ function generateRankingRound(
     return { index: roundIndex, matches, sitOuts: [...sitOutIds], completed: false };
   }
 
-  // mexicano
-  const { active, sitOuts } = pickSitOuts(players, playCount, capacity, false, matchesPerPlayer);
-  const ranked = [...active].sort((a, b) => pointsOf(b) - pointsOf(a));
+  // mexicano — same fairness DNA as Team Mexicano (rank by rate, seat the least-rested first,
+  // weaker player rests on a tie), plus quartet-level history avoidance since individuals get
+  // freshly re-partnered every round instead of staying in a fixed team.
+  const eligible = matchesPerPlayer != null ? players.filter((p) => (playCount[p.id] ?? 0) < matchesPerPlayer) : players;
+  const capped = matchesPerPlayer != null ? players.filter((p) => (playCount[p.id] ?? 0) >= matchesPerPlayer) : [];
+  const seatingOrder = shuffle(eligible).sort(
+    (a, b) => (playCount[a.id] ?? 0) - (playCount[b.id] ?? 0) || rateOf(b) - rateOf(a)
+  );
+  const usable = Math.min(seatingOrder.length, capacity) - (Math.min(seatingOrder.length, capacity) % 4);
+  const active = seatingOrder.slice(0, usable);
+  const sitOuts = [...seatingOrder.slice(usable), ...capped];
+
+  const ranked = shuffle(active).sort((a, b) => rateOf(b) - rateOf(a));
+  const { partnerCount, opponentCount } = deriveRotationHistory(players, rounds);
   const matches: Match[] = [];
   for (let i = 0; i + 4 <= ranked.length; i += 4) {
-    const [r1, r2, r3, r4] = ranked.slice(i, i + 4);
+    const quartet = ranked.slice(i, i + 4).map((p) => p.id) as [string, string, string, string];
+    const { teamA, teamB } = bestQuartetSplit(quartet, partnerCount, opponentCount);
     matches.push({
       courtId: courts[matches.length].id,
-      teamA: [r1.id, r4.id],
-      teamB: [r2.id, r3.id],
+      teamA,
+      teamB,
       scoreA: null,
       scoreB: null,
     });
@@ -500,6 +560,89 @@ function generateRankingRound(
   const leftover = ranked.slice(matches.length * 4);
   const sitOutIds = new Set([...sitOuts.map((p) => p.id), ...leftover.map((p) => p.id)]);
   return { index: roundIndex, matches, sitOuts: [...sitOutIds], completed: false };
+}
+
+/**
+ * Team Mexicano round — Swiss-adapted ladder pairing for fixed teams:
+ *
+ * 1. Seating (who plays this round): teams that have rested least so far get priority, so nobody
+ *    sits out twice before everyone has sat out once. Ties (several teams equally due to play) go
+ *    to the currently lower-ranked team first, mirroring the Swiss-system rule of handing byes to
+ *    the lowest scorer who hasn't had one yet — a leader is never pulled off court ahead of a
+ *    trailer sitting on the same rest count.
+ * 2. Ranking (who's "on top" right now): by points *per match played*, not raw cumulative points —
+ *    byes mean teams can be sitting on a different number of matches played at any given moment, so
+ *    a raw total would unfairly bury a team that simply hasn't rotated onto court as often yet.
+ * 3. Pairing: walk the ranked list top to bottom pairing each team with the *nearest-ranked
+ *    opponent it hasn't already played* — the strongest seated teams meet on the top court, the
+ *    weakest on the bottom, exactly like a Mexicano leaderboard is supposed to work — falling back
+ *    to the least-repeated (then nearest-ranked) available opponent only once a repeat is
+ *    unavoidable. This is the Swiss-system "avoid rematches unless mathematically forced" rule
+ *    applied to a ranked ladder instead of scoring-based chess pairing.
+ */
+export function generateTeamMexicanoRound(
+  fixedTeams: FixedTeam[],
+  courts: Court[],
+  roundIndex: number,
+  standings: Standing[],
+  history: TeamHistory,
+  matchesPerTeam?: number
+): Round {
+  const teamsById = Object.fromEntries(fixedTeams.map((t) => [t.id, t]));
+  const teamIds = fixedTeams.map((t) => t.id);
+  const { appearances, opponentCount } = history;
+  const standingByPlayer: Record<string, Standing> = Object.fromEntries(standings.map((s) => [s.player.id, s]));
+  // Points per match played so far — falls back to 0 (treated as a tie) for a team that hasn't played yet.
+  const rateOf = (teamId: string): number => {
+    const s = standingByPlayer[teamsById[teamId].playerIds[0]];
+    return s && s.played > 0 ? s.points / s.played : 0;
+  };
+
+  const eligible = matchesPerTeam != null ? teamIds.filter((id) => (appearances[id] ?? 0) < matchesPerTeam) : teamIds;
+  const capped = matchesPerTeam != null ? teamIds.filter((id) => (appearances[id] ?? 0) >= matchesPerTeam) : [];
+
+  const matchesThisRound = Math.min(courts.length, Math.floor(eligible.length / 2));
+  const teamsPerRound = matchesThisRound * 2;
+
+  // Seat the least-rested teams first; among ties, prioritize the currently stronger team to play
+  // (so the weaker of two equally-due teams is the one pushed into the rest slot).
+  const seatingOrder = shuffle(eligible).sort(
+    (a, b) => (appearances[a] ?? 0) - (appearances[b] ?? 0) || rateOf(b) - rateOf(a)
+  );
+  const playing = seatingOrder.slice(0, teamsPerRound);
+  const resting = [...seatingOrder.slice(teamsPerRound), ...capped];
+
+  // Rank the seated teams by current form (shuffle first so ties — e.g. everyone at 0 in round 1 — land randomly).
+  const ranked = shuffle(playing).sort((a, b) => rateOf(b) - rateOf(a));
+
+  // Pair down the ranked ladder, preferring the nearest-ranked opponent not already played.
+  const remaining = [...ranked];
+  const pairs: [string, string][] = [];
+  while (remaining.length >= 2) {
+    const a = remaining.shift()!;
+    let bestIdx = 0;
+    let bestRepeats = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const repeats = opponentCount[pairKey(a, remaining[i])] ?? 0;
+      if (repeats < bestRepeats) {
+        bestRepeats = repeats;
+        bestIdx = i;
+        if (repeats === 0) break; // nearest-ranked never-played opponent — this round's best possible pick
+      }
+    }
+    const b = remaining.splice(bestIdx, 1)[0];
+    pairs.push([a, b]);
+  }
+
+  const matches: Match[] = pairs.map((pair, i) => ({
+    courtId: courts[i].id,
+    teamA: teamsById[pair[0]].playerIds,
+    teamB: teamsById[pair[1]].playerIds,
+    scoreA: null,
+    scoreB: null,
+  }));
+  const sitOuts = resting.flatMap((id) => teamsById[id].playerIds);
+  return { index: roundIndex, matches, sitOuts, completed: false };
 }
 
 /**
@@ -511,7 +654,7 @@ function generateRankingRound(
  */
 export function matchesPerPlayerIsFeasible(format: Format, players: Player[], matchesPerPlayer: number): boolean {
   if (!Number.isFinite(matchesPerPlayer) || matchesPerPlayer <= 0) return false;
-  if (format === 'team_americano') return (players.length * matchesPerPlayer) % 2 === 0;
+  if (isTeamFormat(format)) return (players.length * matchesPerPlayer) % 2 === 0;
   if (format === 'mix_americano' || format === 'mixicano') {
     const males = players.filter((p) => p.gender === 'M').length;
     if (males !== players.length - males) return false;
@@ -522,7 +665,9 @@ export function matchesPerPlayerIsFeasible(format: Format, players: Player[], ma
 /** Estimates total rounds a matches-per-player target will produce, for preview before generating. */
 export function estimateRoundsForMatchesPerPlayer(format: Format, players: Player[], courts: Court[], matchesPerPlayer: number): number {
   if (format === 'knockout') return 0;
-  if (format === 'team_americano') {
+  if (isTeamFormat(format)) {
+    // Round count only depends on capacity + fair appearance seating, not on how courts are paired —
+    // Team Americano's scheduler gives the same count Team Mexicano's live, standings-driven rounds will need.
     return generateTeamAmericanoSchedule(createFixedTeams(players), courts, 0, 0, undefined, matchesPerPlayer).length;
   }
   const rotationFormat: Format = format === 'mixicano' ? 'mix_americano' : format === 'mexicano' ? 'americano' : format;
@@ -539,8 +684,17 @@ export function startEvent(event: WowEvent, desiredRounds?: number, matchesPerPl
     const rounds = generateTeamAmericanoSchedule(fixedTeams, event.courts, target, 0, undefined, matchesPerPlayer);
     return { ...event, fixedTeams, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
   }
+  if (event.format === 'team_mexicano') {
+    const fixedTeams = createFixedTeams(event.players);
+    const round = generateTeamMexicanoRound(fixedTeams, event.courts, 1, [], { appearances: {}, opponentCount: {} }, matchesPerPlayer);
+    const totalRoundsEstimate =
+      matchesPerPlayer != null
+        ? estimateRoundsForMatchesPerPlayer(event.format, event.players, event.courts, matchesPerPlayer)
+        : (desiredRounds ?? estimateRounds(event.players.length, event.courts.length));
+    return { ...event, fixedTeams, rounds: [round], totalRoundsEstimate, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
+  }
   if (isRankingBased(event.format)) {
-    const round = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, 1, [], matchesPerPlayer);
+    const round = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, 1, [], [], matchesPerPlayer);
     const totalRoundsEstimate =
       matchesPerPlayer != null
         ? estimateRoundsForMatchesPerPlayer(event.format, event.players, event.courts, matchesPerPlayer)
@@ -559,12 +713,24 @@ export function advanceRound(event: WowEvent): WowEvent {
   if (nextIndex > event.totalRoundsEstimate) {
     return { ...event, rounds, status: 'done' };
   }
+  if (event.format === 'team_mexicano') {
+    const standings = computeStandings({ ...event, rounds });
+    const history = deriveTeamHistory(event.fixedTeams!, rounds);
+    const newRound = generateTeamMexicanoRound(event.fixedTeams!, event.courts, nextIndex, standings, history, event.matchesPerPlayer);
+    return { ...event, rounds: [...rounds, newRound], currentRoundIndex: nextIndex };
+  }
   if (event.format === 'team_americano' || !isRankingBased(event.format)) {
     return { ...event, rounds, currentRoundIndex: nextIndex };
   }
   const standings = computeStandings({ ...event, rounds });
-  const newRound = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, nextIndex, standings, event.matchesPerPlayer);
+  const newRound = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, nextIndex, standings, rounds, event.matchesPerPlayer);
   return { ...event, rounds: [...rounds, newRound], currentRoundIndex: nextIndex };
+}
+
+/** Re-opens a finished event so its organizer can correct scores or keep playing. Standings and completed rounds are untouched — only `status` flips back to 'live'. */
+export function reopenEvent(event: WowEvent): WowEvent {
+  if (event.status !== 'done') return event;
+  return { ...event, status: 'live' };
 }
 
 /** Adds more rounds once the tournament reaches its estimated end, for organizers with time left. */
@@ -578,12 +744,21 @@ export function extendRounds(event: WowEvent, additionalRounds: number): WowEven
     const currentRoundIndex = wasFinished ? event.currentRoundIndex + 1 : event.currentRoundIndex;
     return { ...event, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex, status: 'live' };
   }
+  if (event.format === 'team_mexicano') {
+    const totalRoundsEstimate = event.totalRoundsEstimate + additionalRounds;
+    if (!wasFinished) return { ...event, totalRoundsEstimate, status: 'live' };
+    const standings = computeStandings(event);
+    const history = deriveTeamHistory(event.fixedTeams!, event.rounds);
+    const nextIndex = event.currentRoundIndex + 1;
+    const newRound = generateTeamMexicanoRound(event.fixedTeams!, event.courts, nextIndex, standings, history);
+    return { ...event, rounds: [...event.rounds, newRound], totalRoundsEstimate, currentRoundIndex: nextIndex, status: 'live' };
+  }
   if (isRankingBased(event.format)) {
     const totalRoundsEstimate = event.totalRoundsEstimate + additionalRounds;
     if (!wasFinished) return { ...event, totalRoundsEstimate, status: 'live' };
     const standings = computeStandings(event);
     const nextIndex = event.currentRoundIndex + 1;
-    const newRound = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, nextIndex, standings);
+    const newRound = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, nextIndex, standings, event.rounds);
     return { ...event, rounds: [...event.rounds, newRound], totalRoundsEstimate, currentRoundIndex: nextIndex, status: 'live' };
   }
   const seed = deriveRotationHistory(event.players, event.rounds);
@@ -606,6 +781,13 @@ export function addPlayerMidEvent(event: WowEvent, player: Player): WowEvent {
     const rounds = [...completed, ...regenerated];
     return { ...event, players, fixedTeams, rounds, totalRoundsEstimate: rounds.length };
   }
+  if (event.format === 'team_mexicano') {
+    const fixedTeams = createFixedTeams(players);
+    const standings = computeStandings({ ...event, players, rounds: completed });
+    const history = deriveTeamHistory(fixedTeams, completed);
+    const newCurrent = generateTeamMexicanoRound(fixedTeams, event.courts, event.currentRoundIndex, standings, history, event.matchesPerPlayer);
+    return { ...event, players, fixedTeams, rounds: [...completed, newCurrent] };
+  }
   if (!isRankingBased(event.format)) {
     const seed = deriveRotationHistory(players, completed);
     const regenerated = generateRotationSchedule(event.format, players, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
@@ -615,13 +797,13 @@ export function addPlayerMidEvent(event: WowEvent, player: Player): WowEvent {
   // Ranking formats keep the original totalRoundsEstimate as-is here — recomputing it against the
   // new roster would need each player's already-completed count seeded in, not just a fresh target.
   const standings = computeStandings({ ...event, players, rounds: completed });
-  const newCurrent = generateRankingRound(event.format as 'mexicano' | 'mixicano', players, event.courts, event.currentRoundIndex, standings, event.matchesPerPlayer);
+  const newCurrent = generateRankingRound(event.format as 'mexicano' | 'mixicano', players, event.courts, event.currentRoundIndex, standings, completed, event.matchesPerPlayer);
   return { ...event, players, rounds: [...completed, newCurrent] };
 }
 
 /** Minimum roster size the event format needs to keep running at least one match. */
 export function minPlayersFor(format: Format): number {
-  return format === 'team_americano' ? 2 : 4;
+  return isTeamFormat(format) ? 2 : 4;
 }
 
 /** Removes a player/team from the roster entirely, regenerating not-yet-completed rounds without them. Completed rounds keep their historical record untouched. */
@@ -637,6 +819,13 @@ export function removePlayer(event: WowEvent, playerId: string): WowEvent {
     const rounds = [...completed, ...regenerated];
     return { ...event, players, fixedTeams, rounds, totalRoundsEstimate: rounds.length };
   }
+  if (event.format === 'team_mexicano') {
+    const fixedTeams = createFixedTeams(players);
+    const standings = computeStandings({ ...event, players, rounds: completed });
+    const history = deriveTeamHistory(fixedTeams, completed);
+    const newCurrent = generateTeamMexicanoRound(fixedTeams, event.courts, event.currentRoundIndex, standings, history, event.matchesPerPlayer);
+    return { ...event, players, fixedTeams, rounds: [...completed, newCurrent] };
+  }
   if (!isRankingBased(event.format)) {
     const seed = deriveRotationHistory(players, completed);
     const regenerated = generateRotationSchedule(event.format, players, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
@@ -644,7 +833,7 @@ export function removePlayer(event: WowEvent, playerId: string): WowEvent {
     return { ...event, players, rounds, totalRoundsEstimate: rounds.length };
   }
   const standings = computeStandings({ ...event, players, rounds: completed });
-  const newCurrent = generateRankingRound(event.format as 'mexicano' | 'mixicano', players, event.courts, event.currentRoundIndex, standings, event.matchesPerPlayer);
+  const newCurrent = generateRankingRound(event.format as 'mexicano' | 'mixicano', players, event.courts, event.currentRoundIndex, standings, completed, event.matchesPerPlayer);
   return { ...event, players, rounds: [...completed, newCurrent] };
 }
 
@@ -658,6 +847,12 @@ export function reshuffleUpcoming(event: WowEvent): WowEvent {
     const regenerated = generateTeamAmericanoSchedule(event.fixedTeams!, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
     return { ...event, rounds: [...completed, ...regenerated] };
   }
+  if (event.format === 'team_mexicano') {
+    const standings = computeStandings({ ...event, rounds: completed });
+    const history = deriveTeamHistory(event.fixedTeams!, completed);
+    const cur = generateTeamMexicanoRound(event.fixedTeams!, event.courts, event.currentRoundIndex, standings, history, event.matchesPerPlayer);
+    return { ...event, rounds: [...completed, cur] };
+  }
   if (!isRankingBased(event.format)) {
     const seed = deriveRotationHistory(event.players, completed);
     const regenerated = generateRotationSchedule(event.format, event.players, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
@@ -665,7 +860,7 @@ export function reshuffleUpcoming(event: WowEvent): WowEvent {
   }
   // Ranking formats build one round at a time from standings — regenerate just the current round.
   const standings = computeStandings({ ...event, rounds: completed });
-  const cur = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, event.currentRoundIndex, standings, event.matchesPerPlayer);
+  const cur = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, event.currentRoundIndex, standings, completed, event.matchesPerPlayer);
   return { ...event, rounds: [...completed, cur] };
 }
 
@@ -714,6 +909,20 @@ export function setScore(event: WowEvent, roundIndex: number, courtId: string, t
     };
   });
   return { ...event, rounds };
+}
+
+/**
+ * Enters one score and auto-advances the round if that was its last missing score — the single
+ * place this "score, then maybe advance" rule lives, shared by the app's own keypad and by scores
+ * pulled in from the web score-entry link, so the two paths can never drift apart. Editing a round
+ * that isn't the current live one (a correction to history) never triggers auto-advance.
+ */
+export function applyScore(event: WowEvent, roundIndex: number, courtId: string, team: 'A' | 'B', value: number): WowEvent {
+  const scored = setScore(event, roundIndex, courtId, team, value);
+  if (scored.status !== 'live' || roundIndex !== scored.currentRoundIndex) return scored;
+  const round = scored.rounds.find((r) => r.index === roundIndex);
+  const allScoredNow = !!round && round.matches.every((m) => m.scoreA != null && m.scoreB != null);
+  return allScoredNow ? advanceRound(scored) : scored;
 }
 
 // ===== Single-elimination knockout =====

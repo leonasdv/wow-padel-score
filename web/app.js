@@ -10,13 +10,23 @@
     mixicano: 'Mixicano',
     mix_americano: 'Mix Americano',
     team_americano: 'Team Americano',
+    team_mexicano: 'Team Mexicano',
     knockout: 'Knockout',
   };
 
-  var shareId = new URLSearchParams(window.location.search).get('e');
+  // Kept in sync with isTeamFormat() in src/lib/tournament.ts.
+  function isTeamFormat(format) {
+    return format === 'team_americano' || format === 'team_mexicano';
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var shareId = params.get('e');
+  var editorToken = params.get('editor');
   var lastUpdatedAt = null;
+  var lastInputSource = null;
   var hasShownContent = false;
   var activeTab = 'rounds';
+  var currentEvent = null; // last-rendered payload — read by the score-tap handler
 
   var els = {
     loading: document.getElementById('stateLoading'),
@@ -29,9 +39,16 @@
     eventMeta: document.getElementById('eventMeta'),
     tabRoundsBtn: document.getElementById('tabRoundsBtn'),
     tabStandingsBtn: document.getElementById('tabStandingsBtn'),
+    editorBanner: document.getElementById('editorBanner'),
     roundsPane: document.getElementById('roundsPane'),
     standingsPane: document.getElementById('standingsPane'),
     updatedAt: document.getElementById('updatedAt'),
+    scoreModalOverlay: document.getElementById('scoreModalOverlay'),
+    scoreModalTitle: document.getElementById('scoreModalTitle'),
+    scoreModalInput: document.getElementById('scoreModalInput'),
+    scoreModalError: document.getElementById('scoreModalError'),
+    scoreModalCancelBtn: document.getElementById('scoreModalCancelBtn'),
+    scoreModalConfirmBtn: document.getElementById('scoreModalConfirmBtn'),
   };
 
   function showState(name, message) {
@@ -92,9 +109,12 @@
       var rows = await res.json();
       var row = Array.isArray(rows) ? rows[0] : rows;
       if (!row || !row.payload) { showState('notFound'); return; }
-      if (row.updated_at === lastUpdatedAt) return; // no change, skip re-render
-      render(row.payload, row.updated_at); // may throw on unexpected data shapes
+      // input_source can change without updated_at moving (a mode flip alone doesn't touch the
+      // payload), so both are checked — otherwise a toggle to/from web input could go unnoticed.
+      if (row.updated_at === lastUpdatedAt && row.input_source === lastInputSource) return;
+      render(row.payload, row.updated_at, row.input_source); // may throw on unexpected data shapes
       lastUpdatedAt = row.updated_at;
+      lastInputSource = row.input_source;
       hasShownContent = true;
       showState('content');
     } catch (err) {
@@ -112,7 +132,8 @@
     }
   }
 
-  function render(event, updatedAt) {
+  function render(event, updatedAt, inputSource) {
+    currentEvent = event;
     els.eventName.textContent = event.name;
     els.eventMeta.textContent =
       (FORMAT_NAMES[event.format] || event.format) + ' · ' + event.players.length + ' players · ' + event.courts.length + ' courts';
@@ -121,8 +142,19 @@
     els.statusPill.textContent = isLive ? 'LIVE' : 'ENDED';
     els.statusPill.className = 'pill' + (isLive ? '' : ' ended');
 
+    // Score entry from this link only ever applies to the current round, and only while the
+    // organizer has this event toggled to web input — never for knockout (out of scope for now).
+    var canEditHere = !!editorToken && isLive && event.format !== 'knockout';
+    var isEditable = canEditHere && inputSource === 'web';
+    if (canEditHere && inputSource !== 'web') {
+      els.editorBanner.textContent = 'Scores are being entered from the app right now — ask the organizer to switch to this web link.';
+      els.editorBanner.hidden = false;
+    } else {
+      els.editorBanner.hidden = true;
+    }
+
     if (event.format === 'knockout') renderKnockoutRounds(event);
-    else renderRounds(event);
+    else renderRounds(event, isEditable);
     renderStandings(event);
 
     if (updatedAt) {
@@ -228,7 +260,18 @@
     return 'score-box' + (filled ? (win ? ' win' : ' filled') : '');
   }
 
-  function renderRounds(event) {
+  // `editable` is only ever true for the match's own round (renderRounds only passes it for the
+  // current round) — score entry from the web link never touches a past or future round.
+  function scoreBoxHtml(roundIndex, courtId, team, value, filled, win, editable) {
+    var text = filled ? value : '–';
+    var boxId = 'score-' + roundIndex + '-' + courtId + '-' + team;
+    if (!editable) return '<div class="' + scoreBoxClass(filled, win) + '" id="' + boxId + '">' + text + '</div>';
+    var cls = scoreBoxClass(filled, win) + ' editable';
+    var onclick = "window.__wowScoreTap(" + roundIndex + ",'" + courtId + "','" + team + "'," + (filled ? value : 'null') + ')';
+    return '<div class="' + cls + '" id="' + boxId + '" onclick="' + onclick + '">' + text + '</div>';
+  }
+
+  function renderRounds(event, isEditable) {
     var html = '';
     event.rounds.forEach(function (round) {
       var isCurrentRound = round.index === event.currentRoundIndex;
@@ -247,6 +290,7 @@
         var winB = done && m.scoreB > m.scoreA;
         var status = done ? 'DONE' : isCurrentRound ? 'LIVE' : 'WAITING';
         var statusClass = done ? 'status-done' : isCurrentRound ? 'status-live' : 'status-waiting';
+        var editableHere = isEditable && isCurrentRound;
 
         html +=
           '<div class="court-card"><div class="court-top"><span class="court-name">' +
@@ -259,9 +303,9 @@
           '<div class="team">' +
           m.teamA.map(function (pid) { return '<span class="player-line">' + esc(shortName(playerName(event.players, pid))) + '</span>'; }).join('') +
           '</div>' +
-          '<div class="' + scoreBoxClass(m.scoreA != null, winA) + '">' + (m.scoreA != null ? m.scoreA : '–') + '</div>' +
+          scoreBoxHtml(round.index, court.id, 'A', m.scoreA, m.scoreA != null, winA, editableHere) +
           '<span class="vs">vs</span>' +
-          '<div class="' + scoreBoxClass(m.scoreB != null, winB) + '">' + (m.scoreB != null ? m.scoreB : '–') + '</div>' +
+          scoreBoxHtml(round.index, court.id, 'B', m.scoreB, m.scoreB != null, winB, editableHere) +
           '<div class="team right">' +
           m.teamB.map(function (pid) { return '<span class="player-line">' + esc(shortName(playerName(event.players, pid))) + '</span>'; }).join('') +
           '</div></div></div>';
@@ -269,7 +313,7 @@
       if (round.sitOuts && round.sitOuts.length) {
         html +=
           '<p class="sit-outs">' +
-          (event.format === 'team_americano' ? 'Bye this round: ' : 'Sitting out: ') +
+          (isTeamFormat(event.format) ? 'Bye this round: ' : 'Sitting out: ') +
           esc(round.sitOuts.map(function (id) { return playerName(event.players, id); }).join(', ')) +
           '</p>';
       }
@@ -326,6 +370,84 @@
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
+
+  // ---- Score entry (only reachable when render() decided isEditable was true for this box) ----
+
+  var scoreModalState = null; // { roundIndex, courtId, team }
+
+  function matchLabel(roundIndex, courtId, team) {
+    if (!currentEvent) return 'Score';
+    var round = currentEvent.rounds.find(function (r) { return r.index === roundIndex; });
+    var m = round && round.matches.find(function (mm) { return mm.courtId === courtId; });
+    if (!m) return 'Score';
+    var side = team === 'A' ? m.teamA : m.teamB;
+    return side.map(function (pid) { return shortName(playerName(currentEvent.players, pid)); }).join(' & ');
+  }
+
+  // Exposed on window because scoreBoxHtml() wires it up via an inline onclick attribute, which
+  // always runs in global scope — everything else in this file stays inside the IIFE closure.
+  window.__wowScoreTap = function (roundIndex, courtId, team, currentValue) {
+    scoreModalState = { roundIndex: roundIndex, courtId: courtId, team: team };
+    els.scoreModalTitle.textContent = matchLabel(roundIndex, courtId, team) + ' · Round ' + roundIndex;
+    els.scoreModalInput.value = currentValue == null ? '' : currentValue;
+    els.scoreModalError.hidden = true;
+    els.scoreModalOverlay.hidden = false;
+    els.scoreModalInput.focus();
+  };
+
+  function closeScoreModal() {
+    els.scoreModalOverlay.hidden = true;
+    scoreModalState = null;
+  }
+
+  async function confirmScoreModal() {
+    if (!scoreModalState) return;
+    var value = Number(els.scoreModalInput.value);
+    if (!Number.isFinite(value) || value < 0 || els.scoreModalInput.value.trim() === '') {
+      els.scoreModalError.textContent = 'Enter a valid score.';
+      els.scoreModalError.hidden = false;
+      return;
+    }
+    var state = scoreModalState;
+    els.scoreModalConfirmBtn.disabled = true;
+    try {
+      var res = await fetch(CFG.supabaseUrl.replace(/\/$/, '') + '/rest/v1/rpc/submit_shared_score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey },
+        body: JSON.stringify({
+          p_share_id: shareId,
+          p_editor_token: editorToken,
+          p_round_index: state.roundIndex,
+          p_court_id: state.courtId,
+          p_team: state.team,
+          p_value: Math.round(value),
+        }),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var accepted = await res.json();
+      if (accepted === false) throw new Error('Score entry just switched back to the app — ask the organizer to hand it back to this link.');
+      closeScoreModal();
+      // Mark the box as syncing rather than pretending the value is already final — the
+      // organizer's app still has to pull this submission and apply it before it's official.
+      var box = document.getElementById('score-' + state.roundIndex + '-' + state.courtId + '-' + state.team);
+      if (box) { box.textContent = '…'; box.className = 'score-box pending'; }
+      fetchEvent();
+    } catch (e) {
+      els.scoreModalError.textContent = 'Could not submit: ' + ((e && e.message) || e);
+      els.scoreModalError.hidden = false;
+    } finally {
+      els.scoreModalConfirmBtn.disabled = false;
+    }
+  }
+
+  els.scoreModalCancelBtn.addEventListener('click', closeScoreModal);
+  els.scoreModalConfirmBtn.addEventListener('click', confirmScoreModal);
+  els.scoreModalOverlay.addEventListener('click', function (e) {
+    if (e.target === els.scoreModalOverlay) closeScoreModal();
+  });
+  els.scoreModalInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') confirmScoreModal();
+  });
 
   showState('loading');
   fetchEvent();

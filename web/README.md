@@ -1,7 +1,18 @@
 # WOWPadel Score — live share page
 
-A static, dependency-free page that shows a published event's rounds and standings, updating
-every 60 seconds. No build step — just HTML/CSS/vanilla JS.
+A static, dependency-free page that shows a published event's rounds and standings, polling
+every 5 seconds. No build step — just HTML/CSS/vanilla JS.
+
+## Two links, two purposes
+
+- **Viewer link** (`?e=<shareId>`) — always read-only, for anyone watching.
+- **Score entry link** (`?e=<shareId>&editor=<editorToken>`) — lets whoever has it enter scores
+  for the *current round only*, but **only while the organizer has toggled that event to "Web
+  link" input** (Edit event → Score entry, in the app). Outside that window it falls back to
+  read-only with a banner explaining why. Get this link from the app once an event is published
+  and toggled to web input — it's deliberately a different, narrower secret than the one the app
+  itself uses, so it can't unpublish the event or touch anything outside the current round's
+  scores. See [`../supabase/README.md`](../supabase/README.md) for the full token model.
 
 ## Configure
 

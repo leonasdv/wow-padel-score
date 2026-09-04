@@ -135,3 +135,24 @@ main { padding: 12px 20px 0; }
 .stand-pts { font-size: 15px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
 
 .footer { padding: 24px 20px; text-align: center; font-size: 12px; color: var(--text-faint); }
+
+.editor-banner { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: rgba(255,180,60,.12); border: 1px solid rgba(255,180,60,.3); color: var(--amber); font-size: 13px; font-weight: 700; margin: 0 0 16px; }
+
+.score-box.editable { cursor: pointer; border-style: dashed; border-color: var(--lime); }
+.score-box.editable:active { background: rgba(198,234,59,.12); }
+.score-box.pending { color: var(--text-faint); border-color: var(--hairline-strong); border-style: dashed; }
+
+.score-modal-backdrop { position: fixed; inset: 0; background: rgba(4,10,25,.6); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
+.score-modal { width: 100%; max-width: 640px; background: var(--court-navy); border-top: 1px solid var(--hairline-strong); border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 20px; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+.score-modal-title { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 0 0 14px; }
+.score-modal-input {
+  width: 100%; height: 56px; border-radius: 14px; background: var(--surface); border: 1.5px solid var(--lime);
+  color: var(--lime); font-size: 32px; font-weight: 800; text-align: center; margin-bottom: 10px; -moz-appearance: textfield;
+}
+.score-modal-input::-webkit-outer-spin-button, .score-modal-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.score-modal-error { color: #FF8A8A; font-size: 12px; margin: 0 0 12px; }
+.score-modal-actions { display: flex; gap: 10px; }
+.score-modal-btn { flex: 1; height: 48px; border-radius: 13px; border: none; font-size: 15px; font-weight: 800; cursor: pointer; }
+.score-modal-btn.cancel { background: var(--white06); color: var(--text-primary); }
+.score-modal-btn.confirm { background: var(--lime); color: var(--court-navy); }
+.score-modal-btn:disabled { opacity: .5; cursor: default; }

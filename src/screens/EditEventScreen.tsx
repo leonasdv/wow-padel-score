@@ -9,10 +9,11 @@ import { AddPlayerModal } from '../components/AddPlayerModal';
 import { RenameModal } from '../components/RenameModal';
 import { Avatar } from '../components/Avatar';
 import { ScreenBackground } from '../components/Misc';
+import { SegmentedTabs } from '../components/SegmentedTabs';
 import { useEvents } from '../data/store';
 import { makeId } from '../lib/id';
-import { publishEvent, shareUrlFor, unpublishEvent } from '../lib/share';
-import { addPlayerMidEvent, isRankingBased, minPlayersFor, removePlayer } from '../lib/tournament';
+import { editorShareUrlFor, publishEvent, setShareInputSource, shareUrlFor, unpublishEvent } from '../lib/share';
+import { addPlayerMidEvent, isRankingBased, isTeamFormat, minPlayersFor, removePlayer } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, radius } from '../theme/tokens';
 import type { Gender } from '../types';
@@ -30,6 +31,7 @@ export function EditEventScreen() {
   const [editInitial, setEditInitial] = useState('');
   const [addPlayerVisible, setAddPlayerVisible] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
+  const [inputSourceBusy, setInputSourceBusy] = useState(false);
 
   if (!event) {
     return (
@@ -75,7 +77,7 @@ export function EditEventScreen() {
     }
   };
 
-  const entityWord = event.format === 'team_americano' ? 'team' : 'player';
+  const entityWord = isTeamFormat(event.format) ? 'team' : 'player';
   const minPlayers = minPlayersFor(event.format);
   const isKnockout = event.format === 'knockout';
   // Knockout brackets are fixed at creation — adding/removing entrants isn't supported once built.
@@ -91,7 +93,7 @@ export function EditEventScreen() {
       { text: 'Remove', style: 'destructive', onPress: () => updateEvent(event.id, (e) => removePlayer(e, id)) },
     ]);
   };
-  const regenerationText = isRankingBased(event.format)
+  const regenerationText = isRankingBased(event.format) || event.format === 'team_mexicano'
     ? `Adding a ${entityWord} now will affect pairings once Round ${event.currentRoundIndex} ends. Completed rounds and current standings stay untouched.`
     : `Adding a ${entityWord} now will regenerate upcoming rounds (${event.currentRoundIndex + 1}–${event.totalRoundsEstimate}). Completed rounds and current standings stay untouched.`;
 
@@ -126,6 +128,32 @@ export function EditEventScreen() {
     if (!event.shareId) return;
     await Clipboard.setStringAsync(shareUrlFor(event.shareId));
     Alert.alert('Copied', 'Link copied to clipboard.');
+  };
+
+  const onChangeInputSource = async (source: 'app' | 'web') => {
+    if (source === (event.shareInputSource ?? 'app')) return;
+    setInputSourceBusy(true);
+    try {
+      const updated = await setShareInputSource(event, source);
+      await updateEvent(event.id, () => updated);
+    } catch (err: any) {
+      Alert.alert('Something went wrong', err?.message ?? "Couldn't switch score entry. Check your connection and try again.");
+    } finally {
+      setInputSourceBusy(false);
+    }
+  };
+
+  const editorLink = event.shareId && event.editorToken ? editorShareUrlFor(event.shareId, event.editorToken) : null;
+
+  const onShareEditorLink = () => {
+    if (!editorLink) return;
+    Share.share({ message: editorLink });
+  };
+
+  const onCopyEditorLink = async () => {
+    if (!editorLink) return;
+    await Clipboard.setStringAsync(editorLink);
+    Alert.alert('Copied', 'Score entry link copied to clipboard.');
   };
 
   return (
@@ -175,6 +203,40 @@ export function EditEventScreen() {
             </View>
           )}
 
+          {event.shareId && !isKnockout && (
+            <>
+              <Text style={styles.sectionLabel}>Score entry</Text>
+              <View style={{ marginBottom: 10 }}>
+                <SegmentedTabs
+                  options={[
+                    { key: 'app', label: 'This app' },
+                    { key: 'web', label: 'Web link' },
+                  ]}
+                  value={event.shareInputSource ?? 'app'}
+                  onChange={(k) => onChangeInputSource(k as 'app' | 'web')}
+                />
+              </View>
+              <Text style={styles.editHint}>
+                {(event.shareInputSource ?? 'app') === 'app'
+                  ? 'Scores are entered from this app. Switch to "Web link" to let someone else enter scores for the current round from their phone instead.'
+                  : "Scores are entered from the link below — this app won't accept new scores until you switch back."}
+              </Text>
+              {(event.shareInputSource ?? 'app') === 'web' && editorLink && (
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10, marginBottom: 24 }}>
+                  <Pressable style={styles.linkAction} onPress={onCopyEditorLink} disabled={inputSourceBusy}>
+                    <Ionicons name="copy-outline" size={15} color={colors.textPrimary} />
+                    <Text style={styles.linkActionText}>Copy link</Text>
+                  </Pressable>
+                  <Pressable style={styles.linkAction} onPress={onShareEditorLink} disabled={inputSourceBusy}>
+                    <Ionicons name="share-outline" size={15} color={colors.textPrimary} />
+                    <Text style={styles.linkActionText}>Share</Text>
+                  </Pressable>
+                </View>
+              )}
+              {(event.shareInputSource ?? 'app') === 'app' && <View style={{ marginBottom: 24 }} />}
+            </>
+          )}
+
           {!isKnockout && (
             <>
               <Text style={styles.sectionLabel}>Courts</Text>
@@ -194,7 +256,7 @@ export function EditEventScreen() {
 
           <View style={styles.playersHeadRow}>
             <Text style={styles.sectionLabel}>
-              {event.format === 'team_americano' ? 'Teams' : 'Players'} · {event.players.length}
+              {isTeamFormat(event.format) ? 'Teams' : 'Players'} · {event.players.length}
             </Text>
             {canEditRoster && (
               <Pressable onPress={() => setAddPlayerVisible(true)}>
@@ -239,7 +301,7 @@ export function EditEventScreen() {
         <AddPlayerModal
           visible={addPlayerVisible}
           regenerationText={regenerationText}
-          showGender={event.format !== 'team_americano'}
+          showGender={!isTeamFormat(event.format)}
           onClose={() => setAddPlayerVisible(false)}
           onConfirm={onAddPlayer}
         />

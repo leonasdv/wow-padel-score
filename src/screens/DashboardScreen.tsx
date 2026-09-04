@@ -17,14 +17,16 @@ import { publishEvent, shareUrlFor } from '../lib/share';
 import {
   addPlayerMidEvent,
   advanceRound,
+  applyScore,
   computeStandings,
   describeTiebreak,
   extendRounds,
   isRankingBased,
+  isTeamFormat,
   leaguePointsPerMatch,
   matchLosses,
+  reopenEvent,
   reshuffleUpcoming,
-  setScore,
   sortStandings,
   substituteInRound,
 } from '../lib/tournament';
@@ -147,14 +149,7 @@ export function DashboardScreen() {
     if (!edit) return;
     const value = buffer === '' ? 0 : Number(buffer);
     const { round: roundIndex, courtId, team } = edit;
-    await updateEvent(event.id, (e) => {
-      const scored = setScore(e, roundIndex, courtId, team, value);
-      // Only the live round auto-advances — editing a past round just corrects its score/standings.
-      if (scored.status !== 'live' || roundIndex !== scored.currentRoundIndex) return scored;
-      const round = scored.rounds.find((r) => r.index === roundIndex);
-      const allScoredNow = !!round && round.matches.every((m) => m.scoreA != null && m.scoreB != null);
-      return allScoredNow ? advanceRound(scored) : scored;
-    });
+    await updateEvent(event.id, (e) => applyScore(e, roundIndex, courtId, team, value));
     closeEdit();
   };
 
@@ -215,8 +210,21 @@ export function DashboardScreen() {
     ]);
   };
 
-  const entityWord = event.format === 'team_americano' ? 'team' : 'player';
-  const regenerationText = isRankingBased(event.format)
+  const onReopenEvent = () => {
+    Alert.alert('Reopen this event?', 'It goes back to live so you can fix scores or keep playing.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reopen',
+        onPress: async () => {
+          await updateEvent(event.id, (e) => reopenEvent(e));
+          setTab('rounds');
+        },
+      },
+    ]);
+  };
+
+  const entityWord = isTeamFormat(event.format) ? 'team' : 'player';
+  const regenerationText = isRankingBased(event.format) || event.format === 'team_mexicano'
     ? `Adding a ${entityWord} now will affect pairings once Round ${event.currentRoundIndex} ends. Completed rounds and current standings stay untouched.`
     : `Adding a ${entityWord} now will regenerate upcoming rounds (${event.currentRoundIndex + 1}–${event.totalRoundsEstimate}). Completed rounds and current standings stay untouched.`;
 
@@ -464,7 +472,7 @@ export function DashboardScreen() {
 
                     {!!round.sitOuts.length && (
                       <Text style={styles.sitOutText}>
-                        {event.format === 'team_americano' ? 'Bye this round: ' : 'Sitting out: '}
+                        {isTeamFormat(event.format) ? 'Bye this round: ' : 'Sitting out: '}
                         {round.sitOuts.map((id) => playerName(event.players, id)).join(', ')}
                       </Text>
                     )}
@@ -519,25 +527,30 @@ export function DashboardScreen() {
               </View>
             )}
             {event.status === 'done' && (
-              <View style={[styles.footer, styles.footerRow]}>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label="Share result card"
-                    icon="share-social-outline"
-                    iconPosition="left"
-                    onPress={() => nav.navigate('ResultCard', { eventId: event.id })}
-                  />
+              <View style={styles.footer}>
+                <View style={styles.footerRow}>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label="Share result card"
+                      icon="share-social-outline"
+                      iconPosition="left"
+                      onPress={() => nav.navigate('ResultCard', { eventId: event.id })}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label="Share live"
+                      variant="secondary"
+                      icon="share-social-outline"
+                      iconPosition="left"
+                      loading={shareBusy}
+                      onPress={onShareLive}
+                    />
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label="Share live"
-                    variant="secondary"
-                    icon="share-social-outline"
-                    iconPosition="left"
-                    loading={shareBusy}
-                    onPress={onShareLive}
-                  />
-                </View>
+                <Pressable onPress={onReopenEvent} style={styles.endEventRow}>
+                  <Text style={styles.endEventText}>Reopen event</Text>
+                </Pressable>
               </View>
             )}
         </View>
@@ -667,7 +680,7 @@ export function DashboardScreen() {
         <AddPlayerModal
           visible={addPlayerVisible}
           regenerationText={regenerationText}
-          showGender={event.format !== 'team_americano'}
+          showGender={!isTeamFormat(event.format)}
           onClose={() => setAddPlayerVisible(false)}
           onConfirm={onAddPlayer}
         />

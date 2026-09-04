@@ -38,7 +38,7 @@ export function CreateCourtsScreen() {
         </View>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <View style={styles.grid}>
-            {[1, 2, 3, 4].map((n) => {
+            {[1, 2, 3, 4, 5, 6].map((n) => {
               const on = draft.courts.length === n;
               return (
                 <Pressable key={n} onPress={() => setCount(n)} style={[styles.cell, on && styles.cellOn]}>
