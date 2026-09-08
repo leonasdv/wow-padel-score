@@ -1,5 +1,10 @@
+import { supabase } from './supabase';
+
+// Last-resort public proxies, tried only if the direct fetch (native only — the web/PWA
+// build always hits reclub.co's missing CORS headers) and our own Supabase edge function
+// both fail. Free CORS proxies are known to rug-pull (rate limits, auth walls, outages)
+// without warning, so these are backup, not the primary path.
 const CORS_PROXIES = [
-  (url: string) => url,
   (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
   (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
 ];
@@ -58,8 +63,33 @@ export function parseConfirmedNames(html: string): string[] {
   return names;
 }
 
+async function fetchViaEdgeFunction(url: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('reclub-fetch', { body: { url } });
+  if (error) throw new Error('Could not reach the Reclub fetch service.');
+  if (typeof data?.html !== 'string') throw new Error(data?.error ?? 'Reclub fetch service returned no HTML.');
+  return data.html;
+}
+
 async function fetchHtml(url: string): Promise<string> {
   let lastError: unknown;
+
+  try {
+    const res = await fetch(url, { headers: { Accept: 'text/html' } });
+    if (res.ok) {
+      const text = await res.text();
+      if (text.length > 200) return text;
+    }
+  } catch (err) {
+    lastError = err;
+  }
+
+  try {
+    const html = await fetchViaEdgeFunction(url);
+    if (html.length > 200) return html;
+  } catch (err) {
+    lastError = err;
+  }
+
   for (const withProxy of CORS_PROXIES) {
     try {
       const res = await fetch(withProxy(url), { headers: { Accept: 'text/html' } });
@@ -70,6 +100,7 @@ async function fetchHtml(url: string): Promise<string> {
       lastError = err;
     }
   }
+
   throw lastError instanceof Error ? lastError : new Error('Could not reach that Reclub page.');
 }
 

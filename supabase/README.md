@@ -49,3 +49,18 @@ Edit `web/config.js` with the same URL + anon key. Unlike `.env`, this file **is
 and deployed publicly — that's expected: the anon key here only unlocks the RPC functions
 above, which enforce their own authorization (share_id / edit_token / editor_token), so
 there's nothing sensitive in it.
+
+## 5. Deploy the Reclub fetch function (once)
+
+`functions/reclub-fetch` fetches a Reclub event page server-side for the Reclub-import
+feature — reclub.co sends no CORS headers, which only matters on the web/PWA build (native
+apps aren't subject to browser CORS). Deploy it once, and again whenever it changes:
+
+```
+npx supabase login
+npx supabase link --project-ref sqkiemhdcxgilyydwauo
+npx supabase functions deploy reclub-fetch --no-verify-jwt
+```
+
+`--no-verify-jwt` matches the RPC functions above: the anon key is enough, and the function
+itself only allows fetching `reclub.co` URLs (never an open proxy).
