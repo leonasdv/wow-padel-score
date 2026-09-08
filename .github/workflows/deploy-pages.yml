@@ -1,9 +1,17 @@
-name: Deploy live share page to GitHub Pages
+name: Deploy live share page + PWA to GitHub Pages
 
 on:
   push:
     branches: [main]
-    paths: ["web/**"]
+    paths:
+      - "web/**"
+      - "src/**"
+      - "assets/**"
+      - "web-pwa/**"
+      - "scripts/patch-web-export.mjs"
+      - "app.json"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch: {}
 
 permissions:
@@ -21,13 +29,31 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      # Public-by-design (already embedded in the shipped app bundle) — not a secret.
+      EXPO_PUBLIC_SUPABASE_URL: https://sqkiemhdcxgilyydwauo.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxa2llbWhkY3hnaWx5eWR3YXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NDA4MzksImV4cCI6MjEwMTMxNjgzOX0.jw2g7A5ZYX3oUbQl0c0SLcLgqjQsdFncrmqehCq63Dg
+      EXPO_PUBLIC_SHARE_BASE_URL: https://leonasdv.github.io/wow-padel-score
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Stamp cache-busting version
         run: sed -i "s/__DEPLOY_VERSION__/${GITHUB_SHA::8}/g" ./web/index.html
+      - name: Install dependencies
+        run: npm ci
+      - name: Export the app as a web PWA
+        run: npm run export:web
+      - name: Assemble combined Pages site
+        run: |
+          mkdir -p site
+          cp -r web/. site/
+          mkdir -p site/pwa
+          cp -r dist/. site/pwa/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ./web
+          path: ./site
       - id: deployment
         uses: actions/deploy-pages@v4

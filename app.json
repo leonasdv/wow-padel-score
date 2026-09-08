@@ -35,6 +35,9 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "experiments": {
+      "baseUrl": "/wow-padel-score/pwa"
+    },
     "plugins": [
       [
         "expo-image-picker",

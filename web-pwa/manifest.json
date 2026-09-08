@@ -1,0 +1,16 @@
+{
+  "name": "WOW Padel Score",
+  "short_name": "WOW Padel",
+  "description": "Offline padel tournament scoring — create events, run rounds, track standings.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B1E3B",
+  "theme_color": "#0B1E3B",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
