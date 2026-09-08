@@ -1,5 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
-import { Alert, Platform, Share } from 'react-native';
+import { Platform, Share } from 'react-native';
+import { Alert } from './alert';
 
 /**
  * Copies a link with a guaranteed-visible fallback on web: `expo-clipboard` there tries the

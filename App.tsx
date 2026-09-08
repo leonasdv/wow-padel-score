@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AlertHost } from './src/components/AlertHost';
 import { SplashOverlay } from './src/components/SplashOverlay';
 import { DraftProvider } from './src/data/draft';
 import { EventsProvider } from './src/data/store';
@@ -45,6 +46,7 @@ export default function App() {
           <StatusBar style="light" />
         </DraftProvider>
       </EventsProvider>
+      <AlertHost />
       {showSplash && <SplashOverlay />}
     </SafeAreaProvider>
   );
