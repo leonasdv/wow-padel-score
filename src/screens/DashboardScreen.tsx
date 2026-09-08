@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { Button } from '../components/Button';
@@ -12,6 +12,7 @@ import { ScoreKeypad } from '../components/ScoreKeypad';
 import { SegmentedTabs } from '../components/SegmentedTabs';
 import { TiebreakInfoModal, type TiebreakEntry } from '../components/TiebreakInfoModal';
 import { useEvents } from '../data/store';
+import { shareOrCopyLink } from '../lib/clipboard';
 import { makeId } from '../lib/id';
 import { publishEvent, shareUrlFor } from '../lib/share';
 import {
@@ -122,7 +123,7 @@ export function DashboardScreen() {
         await updateEvent(event.id, () => published);
         target = published;
       }
-      await Share.share({ message: shareUrlFor(target.shareId!) });
+      await shareOrCopyLink(shareUrlFor(target.shareId!));
     } catch (err: any) {
       Alert.alert('Something went wrong', err?.message ?? 'Could not create the share link. Check your connection and try again.');
     } finally {

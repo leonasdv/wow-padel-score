@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import * as Clipboard from 'expo-clipboard';
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { RenameModal } from '../components/RenameModal';
@@ -11,6 +10,7 @@ import { Avatar } from '../components/Avatar';
 import { ScreenBackground } from '../components/Misc';
 import { SegmentedTabs } from '../components/SegmentedTabs';
 import { useEvents } from '../data/store';
+import { copyLinkWithFeedback, shareOrCopyLink } from '../lib/clipboard';
 import { makeId } from '../lib/id';
 import { editorShareUrlFor, publishEvent, setShareInputSource, shareUrlFor, unpublishEvent } from '../lib/share';
 import { addPlayerMidEvent, isRankingBased, isTeamFormat, minPlayersFor, removePlayer } from '../lib/tournament';
@@ -121,13 +121,12 @@ export function EditEventScreen() {
 
   const onShareLink = () => {
     if (!event.shareId) return;
-    Share.share({ message: shareUrlFor(event.shareId) });
+    shareOrCopyLink(shareUrlFor(event.shareId));
   };
 
   const onCopyLink = async () => {
     if (!event.shareId) return;
-    await Clipboard.setStringAsync(shareUrlFor(event.shareId));
-    Alert.alert('Copied', 'Link copied to clipboard.');
+    await copyLinkWithFeedback(shareUrlFor(event.shareId));
   };
 
   const onChangeInputSource = async (source: 'app' | 'web') => {
@@ -147,13 +146,12 @@ export function EditEventScreen() {
 
   const onShareEditorLink = () => {
     if (!editorLink) return;
-    Share.share({ message: editorLink });
+    shareOrCopyLink(editorLink);
   };
 
   const onCopyEditorLink = async () => {
     if (!editorLink) return;
-    await Clipboard.setStringAsync(editorLink);
-    Alert.alert('Copied', 'Score entry link copied to clipboard.');
+    await copyLinkWithFeedback(editorLink, 'Score entry link copied to clipboard.');
   };
 
   return (
