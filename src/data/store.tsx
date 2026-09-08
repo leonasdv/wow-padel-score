@@ -15,6 +15,8 @@ interface EventsContextValue {
   addEvent: (event: WowEvent) => Promise<void>;
   updateEvent: (id: string, updater: (event: WowEvent) => WowEvent) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
+  /** Overwrites the entire local roster — used to apply a merged/imported backup in one write. */
+  replaceAllEvents: (events: WowEvent[]) => Promise<void>;
   /** Pulls scores submitted from the web link for one event right now, instead of waiting for the
    * background poll — used for a manual "sync now" action and whenever the app comes to the
    * foreground (a `setInterval` only runs while the app is actually in the foreground, so without
@@ -75,6 +77,13 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
       await persist(events.filter((e) => e.id !== id));
     },
     [events, persist]
+  );
+
+  const replaceAllEvents = useCallback(
+    async (next: WowEvent[]) => {
+      await persist(next);
+    },
+    [persist]
   );
 
   // Kept fresh on every render so the poll loop below always reads the latest roster, without
@@ -144,8 +153,8 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
   }, [loading, syncAllWebEvents]);
 
   const value = useMemo(
-    () => ({ events, loading, getEvent, addEvent, updateEvent, deleteEvent, syncSharedScores }),
-    [events, loading, getEvent, addEvent, updateEvent, deleteEvent, syncSharedScores]
+    () => ({ events, loading, getEvent, addEvent, updateEvent, deleteEvent, replaceAllEvents, syncSharedScores }),
+    [events, loading, getEvent, addEvent, updateEvent, deleteEvent, replaceAllEvents, syncSharedScores]
   );
 
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>;

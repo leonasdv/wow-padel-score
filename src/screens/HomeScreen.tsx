@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusPill } from '../components/Misc';
 import { WowLogo } from '../components/WowLogo';
 import { useDraft } from '../data/draft';
 import { useEvents } from '../data/store';
+import { exportAllData, mergeEvents, pickBackupFile } from '../lib/backup';
 import { makeId } from '../lib/id';
 import { startEvent } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
@@ -21,9 +22,10 @@ function formatDate(ts: number): string {
 
 export function HomeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { events, addEvent, deleteEvent } = useEvents();
+  const { events, addEvent, deleteEvent, replaceAllEvents } = useEvents();
   const { reset } = useDraft();
   const liveCount = events.filter((e) => e.status === 'live').length;
+  const [backupBusy, setBackupBusy] = useState(false);
 
   const onOpenEvent = (ev: WowEvent) => {
     if (ev.format === 'knockout') {
@@ -77,15 +79,58 @@ export function HomeScreen() {
     ]);
   };
 
+  const onExportAll = async () => {
+    if (events.length === 0) {
+      Alert.alert('Nothing to export', 'Create a tournament first.');
+      return;
+    }
+    setBackupBusy(true);
+    try {
+      await exportAllData(events);
+    } catch (err: any) {
+      Alert.alert('Export failed', err?.message ?? 'Could not export your data. Please try again.');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const onImportAll = async () => {
+    setBackupBusy(true);
+    try {
+      const picked = await pickBackupFile();
+      if (picked.cancelled) return;
+      const { merged, added, updated } = mergeEvents(events, picked.events);
+      await replaceAllEvents(merged);
+      Alert.alert('Import complete', `${added} tournament${added === 1 ? '' : 's'} added, ${updated} updated. Existing tournaments not in the file were kept.`);
+    } catch (err: any) {
+      Alert.alert('Import failed', err?.message ?? 'Could not import that file. Please try again.');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const onOpenBackupMenu = () => {
+    Alert.alert('Backup & restore', 'Export every tournament to a file, or import one previously saved.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Export all data', onPress: onExportAll },
+      { text: 'Import data', onPress: onImportAll },
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <WowLogo size={22} subtitle />
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {`LF`}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Pressable style={styles.backupBtn} onPress={onOpenBackupMenu} disabled={backupBusy} hitSlop={8}>
+              <Ionicons name="cloud-upload-outline" size={18} color={backupBusy ? colors.textFaint : colors.textSecondary} />
+            </Pressable>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {`LF`}
+              </Text>
+            </View>
           </View>
         </View>
         <Text style={styles.title}>Events</Text>
@@ -147,6 +192,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 20 },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
+  backupBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.white06, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontWeight: '800', color: colors.lime, fontSize: 14 },
   title: { marginTop: 22, fontSize: 28, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary },
   subtitle: { marginTop: 4, fontSize: 14, color: colors.textMuted },
