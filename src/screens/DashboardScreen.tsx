@@ -29,7 +29,7 @@ import {
   reopenEvent,
   reshuffleUpcoming,
   sortStandings,
-  substituteInRound,
+  substituteParticipant,
 } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, radius } from '../theme/tokens';
@@ -290,9 +290,9 @@ export function DashboardScreen() {
 
   const confirmSwap = async (incomingId: string) => {
     if (!swapOutgoing) return;
-    const { id: outgoingId, round } = swapOutgoing;
+    const { id: outgoingId } = swapOutgoing;
     setSwapOutgoing(null);
-    await updateEvent(event.id, (e) => substituteInRound(e, round, outgoingId, incomingId));
+    await updateEvent(event.id, (e) => substituteParticipant(e, outgoingId, incomingId));
   };
 
   return (
@@ -739,7 +739,7 @@ export function DashboardScreen() {
         <PlayerPickerModal
           visible={!!swapOutgoing}
           title={`Replace ${swapOutgoing ? playerName(event.players, swapOutgoing.id) : entityWord}`}
-          subtitle={`Round ${swapOutgoing?.round ?? ''} only — they'll swap places; every other round stays as scheduled.`}
+          subtitle="They'll swap places from here on — completed rounds and current standings stay untouched, and total matches for each stay the same."
           items={swapCandidates}
           emptyText={`No other ${entityWord}s to swap in right now.`}
           onPick={confirmSwap}

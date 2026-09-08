@@ -875,14 +875,16 @@ export function replaceParticipant(event: WowEvent, playerId: string, newName: s
 }
 
 /**
- * Swaps two participants' positions within a SINGLE round — one takes over the other's exact
- * slot (their match, or sitting out) for that round only. Every other round is untouched, so if
- * `outgoingId` had other scheduled rounds, those stay theirs. Use when a scheduled player/team
- * hasn't shown up for the round in progress and someone already in the roster fills in for them.
+ * Substitutes a participant for every round that hasn't been completed yet — outgoing and
+ * incoming trade slots (their match, or sitting out) in the current round and every later one,
+ * while completed rounds and their recorded scores stay exactly as played. Because it's a like-
+ * for-like slot swap across the same remaining rounds, neither participant's total match count
+ * for the event changes. Use when a scheduled player/team can't continue and someone already in
+ * the roster takes over their remaining matches.
  */
-export function substituteInRound(event: WowEvent, roundIndex: number, outgoingId: string, incomingId: string): WowEvent {
+export function substituteParticipant(event: WowEvent, outgoingId: string, incomingId: string): WowEvent {
   const rounds = event.rounds.map((r) => {
-    if (r.index !== roundIndex) return r;
+    if (r.completed) return r;
     const swap = (pid: string) => (pid === outgoingId ? incomingId : pid === incomingId ? outgoingId : pid);
     const matches = r.matches.map((m) => ({ ...m, teamA: m.teamA.map(swap), teamB: m.teamB.map(swap) }));
     const sitOuts = r.sitOuts.map(swap);
