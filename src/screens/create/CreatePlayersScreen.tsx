@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { GenderToggle } from '../../components/GenderToggle';
+import { ImportReclubModal } from '../../components/ImportReclubModal';
 import { ScreenBackground, StepHeader } from '../../components/Misc';
 import { useDraft } from '../../data/draft';
 import { useEvents } from '../../data/store';
@@ -14,7 +15,7 @@ import { makeId } from '../../lib/id';
 import { estimateRoundsForMatchesPerPlayer, isTeamFormat, knockoutRoundName, matchesPerPlayerIsFeasible, startEvent } from '../../lib/tournament';
 import type { RootStackParamList } from '../../navigation/types';
 import { colors, radius } from '../../theme/tokens';
-import type { Gender, WowEvent } from '../../types';
+import type { Gender, Player, WowEvent } from '../../types';
 
 const MAX_PLAYERS = 48;
 
@@ -24,6 +25,8 @@ export function CreatePlayersScreen() {
   const { addEvent } = useEvents();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [selectedForLink, setSelectedForLink] = useState<string[]>([]);
 
   const isTeamMode = isTeamFormat(draft.format);
   const isKnockout = draft.format === 'knockout';
@@ -41,12 +44,59 @@ export function CreatePlayersScreen() {
     setName('');
   };
 
+  const importNames = (imported: string[]) => {
+    setDraft((d) => {
+      const existing = new Set(d.players.map((p) => p.name.trim().toLowerCase()));
+      let lastGender: Gender = d.players.length > 0 ? d.players[d.players.length - 1].gender : 'F';
+      let slotsLeft = MAX_PLAYERS - d.players.length;
+      const added: Player[] = [];
+      for (const raw of imported) {
+        if (slotsLeft <= 0) break;
+        const trimmed = raw.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (existing.has(key)) continue;
+        existing.add(key);
+        slotsLeft--;
+        lastGender = showGender ? (lastGender === 'M' ? 'F' : 'M') : 'M';
+        added.push({ id: makeId('player'), name: trimmed, gender: lastGender });
+      }
+      return { ...d, players: [...d.players, ...added] };
+    });
+    setShowImport(false);
+  };
+
   const setGender = (id: string, gender: Gender) => {
     setDraft((d) => ({ ...d, players: d.players.map((p) => (p.id === id ? { ...p, gender } : p)) }));
   };
 
   const removePlayer = (id: string) => {
     setDraft((d) => ({ ...d, players: d.players.filter((p) => p.id !== id) }));
+    setSelectedForLink((prev) => prev.filter((pid) => pid !== id));
+  };
+
+  const toggleSelectForLink = (id: string) => {
+    setSelectedForLink((prev) => {
+      if (prev.includes(id)) return prev.filter((pid) => pid !== id);
+      if (prev.length >= 2) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const linkSelected = () => {
+    if (selectedForLink.length !== 2) return;
+    setDraft((d) => {
+      const a = d.players.find((p) => p.id === selectedForLink[0]);
+      const b = d.players.find((p) => p.id === selectedForLink[1]);
+      if (!a || !b) return d;
+      const firstIndex = d.players.findIndex((p) => p.id === a.id);
+      const merged: Player = { id: makeId('player'), name: `${a.name} & ${b.name}`, gender: 'M' };
+      const rest = d.players.filter((p) => p.id !== a.id && p.id !== b.id);
+      const insertAt = Math.min(firstIndex, rest.length);
+      const players = [...rest.slice(0, insertAt), merged, ...rest.slice(insertAt)];
+      return { ...d, players };
+    });
+    setSelectedForLink([]);
   };
 
   const minRequired = isTeamMode ? 2 : isKnockout ? 3 : 4;
@@ -127,6 +177,30 @@ export function CreatePlayersScreen() {
           </Pressable>
         </View>
 
+        <Pressable style={styles.importRow} onPress={() => setShowImport(true)}>
+          <Ionicons name="cloud-download-outline" size={15} color={colors.textSecondary} />
+          <Text style={styles.importText}>Import from Reclub</Text>
+        </Pressable>
+
+        {isTeamMode && (
+          <View style={styles.linkBar}>
+            <Text style={styles.linkHint}>
+              {selectedForLink.length === 2
+                ? '2 selected'
+                : selectedForLink.length === 1
+                  ? '1 selected — tap another entry to pair'
+                  : 'Tap 2 entries below to merge them into one team'}
+            </Text>
+            <Pressable
+              style={[styles.linkBtn, selectedForLink.length === 2 ? styles.linkBtnOn : styles.linkBtnOff]}
+              onPress={linkSelected}
+              disabled={selectedForLink.length !== 2}
+            >
+              <Text style={[styles.linkBtnText, selectedForLink.length === 2 && styles.linkBtnTextOn]}>Link as team</Text>
+            </Pressable>
+          </View>
+        )}
+
         <FlatList
           data={draft.players}
           keyExtractor={(p) => p.id}
@@ -141,20 +215,35 @@ export function CreatePlayersScreen() {
                   : 'Add at least 4 players to generate rounds.'}
             </Text>
           }
-          renderItem={({ item, index }) => (
-            <View style={styles.row}>
-              <Text style={styles.idx}>{index + 1}</Text>
-              <Avatar name={item.name} gender={item.gender} />
-              <Text style={styles.name} numberOfLines={1}>
-                {item.name}
-              </Text>
-              {showGender && <GenderToggle value={item.gender} onChange={(g) => setGender(item.id, g)} />}
-              <Pressable onPress={() => removePlayer(item.id)} hitSlop={8} style={{ marginLeft: 8 }}>
-                <Ionicons name="close" size={16} color={colors.textFaint} />
-              </Pressable>
-            </View>
-          )}
+          renderItem={({ item, index }) => {
+            const isSelected = selectedForLink.includes(item.id);
+            return (
+              <View style={[styles.row, isTeamMode && isSelected && styles.rowSelected]}>
+                {isTeamMode ? (
+                  <Pressable
+                    onPress={() => toggleSelectForLink(item.id)}
+                    style={[styles.checkbox, isSelected && styles.checkboxOn]}
+                    hitSlop={6}
+                  >
+                    {isSelected && <Ionicons name="checkmark" size={13} color={colors.courtNavy} />}
+                  </Pressable>
+                ) : (
+                  <Text style={styles.idx}>{index + 1}</Text>
+                )}
+                <Avatar name={item.name} gender={item.gender} />
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                {showGender && <GenderToggle value={item.gender} onChange={(g) => setGender(item.id, g)} />}
+                <Pressable onPress={() => removePlayer(item.id)} hitSlop={8} style={{ marginLeft: 8 }}>
+                  <Ionicons name="close" size={16} color={colors.textFaint} />
+                </Pressable>
+              </View>
+            );
+          }}
         />
+
+        <ImportReclubModal visible={showImport} isTeamMode={isTeamMode} onClose={() => setShowImport(false)} onImport={importNames} />
 
         {!isKnockout && (
           <View style={styles.matchesSection}>
@@ -202,6 +291,26 @@ const styles = StyleSheet.create({
   counterMax: { color: colors.textFaint, fontWeight: '700' },
   hint: { paddingHorizontal: 24, marginTop: 6, fontSize: 12, color: colors.textFaint },
   inputRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12 },
+  importRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingBottom: 8 },
+  importText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
+  linkBar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, paddingBottom: 10 },
+  linkHint: { flex: 1, fontSize: 12, fontWeight: '600', color: colors.textFaint },
+  linkBtn: { height: 34, paddingHorizontal: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  linkBtnOn: { backgroundColor: colors.lime },
+  linkBtnOff: { backgroundColor: colors.white06 },
+  linkBtnText: { fontSize: 12, fontWeight: '800', color: colors.textFaint },
+  linkBtnTextOn: { color: colors.courtNavy },
+  rowSelected: { borderColor: colors.lime },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: colors.hairlineStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: colors.lime, borderWidth: 0 },
   input: {
     flex: 1,
     height: 52,
