@@ -10,7 +10,8 @@ import { TextField } from '../../components/TextField';
 import { useDraft } from '../../data/draft';
 import { useEvents } from '../../data/store';
 import type { RootStackParamList } from '../../navigation/types';
-import { colors } from '../../theme/tokens';
+import type { ColorPalette } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 
 const MAX_LEN = 40;
 
@@ -18,6 +19,8 @@ export function CreateNameScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { draft, setDraft } = useDraft();
   const { events } = useEvents();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [name, setName] = useState(draft.name);
 
   const recent = useMemo(() => {
@@ -64,7 +67,8 @@ export function CreateNameScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   safe: { flex: 1 },
   body: { padding: 24, paddingTop: 36 },
   title: { fontSize: 28, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary, marginBottom: 8 },

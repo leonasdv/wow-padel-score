@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import type { ScoringMode } from '../types';
 
 interface Props {
@@ -23,6 +25,8 @@ interface Props {
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'];
 
 export function ScoreKeypad({ visible, title, scoringMode, pot, buffer, oppLabel, onDigit, onDelete, onConfirm, onClose, onClear }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const max = scoringMode === 'total' ? pot : 99;
   const bufNum = buffer === '' ? null : Math.min(Number(buffer), max);
@@ -94,64 +98,65 @@ export function ScoreKeypad({ visible, title, scoringMode, pot, buffer, oppLabel
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(4,10,25,.55)' },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#0e2242',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderColor: colors.hairlineStrong,
-  },
-  grabber: { width: 44, height: 5, borderRadius: 99, backgroundColor: 'rgba(255,255,255,.18)', alignSelf: 'center', marginBottom: 16 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12 },
-  title: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.textMuted },
-  clearText: { fontSize: 12, fontWeight: '800', color: colors.amber },
-  valuesRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  valueBox: {
-    flex: 1,
-    minWidth: 96,
-    height: 60,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.lime,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  valueText: { fontSize: 36, fontWeight: '800', color: colors.lime },
-  slash: { fontSize: 15, fontWeight: '800', color: colors.textFaint },
-  autoBox: {
-    flex: 1,
-    minWidth: 96,
-    height: 60,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(255,255,255,.03)',
-    borderWidth: 1.5,
-    borderColor: colors.hairlineStrong,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  autoText: { fontSize: 32, fontWeight: '800', color: colors.textFaint, lineHeight: 34 },
-  autoLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', color: colors.textGhost },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  key: {
-    width: '31%',
-    height: 56,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(255,255,255,.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  keyPressed: { backgroundColor: 'rgba(255,255,255,.14)' },
-  keyDisabled: { backgroundColor: 'rgba(255,255,255,.02)' },
-  keyLabel: { fontSize: 22, fontWeight: '800', color: colors.textPrimary },
-  keyLabelDisabled: { color: 'rgba(255,255,255,.15)' },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    backdrop: { flex: 1, backgroundColor: 'rgba(4,10,25,.55)' },
+    sheet: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 22,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderColor: colors.hairlineStrong,
+    },
+    grabber: { width: 44, height: 5, borderRadius: 99, backgroundColor: colors.hairlineStrong, alignSelf: 'center', marginBottom: 16 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12 },
+    title: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.textMuted },
+    clearText: { fontSize: 12, fontWeight: '800', color: colors.amber },
+    valuesRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+    valueBox: {
+      flex: 1,
+      minWidth: 96,
+      height: 60,
+      borderRadius: radius.lg,
+      backgroundColor: colors.surface,
+      borderWidth: 1.5,
+      borderColor: colors.lime,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    valueText: { fontSize: 36, fontWeight: '800', color: colors.lime },
+    slash: { fontSize: 15, fontWeight: '800', color: colors.textFaint },
+    autoBox: {
+      flex: 1,
+      minWidth: 96,
+      height: 60,
+      borderRadius: radius.lg,
+      backgroundColor: colors.white05,
+      borderWidth: 1.5,
+      borderColor: colors.hairlineStrong,
+      borderStyle: 'dashed',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    autoText: { fontSize: 32, fontWeight: '800', color: colors.textFaint, lineHeight: 34 },
+    autoLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', color: colors.textGhost },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    key: {
+      width: '31%',
+      height: 56,
+      borderRadius: radius.lg,
+      backgroundColor: colors.white06,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    keyPressed: { backgroundColor: colors.hairlineStrong },
+    keyDisabled: { backgroundColor: 'transparent' },
+    keyLabel: { fontSize: 22, fontWeight: '800', color: colors.textPrimary },
+    keyLabelDisabled: { color: colors.textGhost },
+  });

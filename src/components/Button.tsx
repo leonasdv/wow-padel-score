@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 interface Props {
   label: string;
@@ -24,6 +26,8 @@ export function Button({
   loading,
   fullWidth = true,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const isPrimary = variant === 'primary';
   const isGhost = variant === 'ghost';
   return (
@@ -59,19 +63,20 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    height: 58,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primary: { backgroundColor: colors.lime },
-  secondary: { backgroundColor: colors.white06, borderWidth: 1, borderColor: colors.hairlineStrong },
-  ghost: { backgroundColor: 'transparent' },
-  content: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  label: { fontSize: 16, fontWeight: '800' },
-  labelPrimary: { color: colors.courtNavy },
-  labelSecondary: { color: colors.textPrimary },
-  labelGhost: { color: colors.textMuted, fontWeight: '700' },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    base: {
+      height: 58,
+      borderRadius: radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primary: { backgroundColor: colors.lime },
+    secondary: { backgroundColor: colors.white06, borderWidth: 1, borderColor: colors.hairlineStrong },
+    ghost: { backgroundColor: 'transparent' },
+    content: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    label: { fontSize: 16, fontWeight: '800' },
+    labelPrimary: { color: colors.courtNavy },
+    labelSecondary: { color: colors.textPrimary },
+    labelGhost: { color: colors.textMuted, fontWeight: '700' },
+  });

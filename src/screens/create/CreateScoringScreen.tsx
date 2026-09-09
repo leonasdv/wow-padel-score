@@ -1,17 +1,21 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
 import { ScreenBackground, StepHeader } from '../../components/Misc';
 import { useDraft } from '../../data/draft';
 import type { RootStackParamList } from '../../navigation/types';
-import { colors, radius } from '../../theme/tokens';
+import type { ColorPalette } from '../../theme/tokens';
+import { radius } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 
 export function CreateScoringScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { draft, setDraft } = useDraft();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const isTotal = draft.scoringMode === 'total';
 
   return (
@@ -82,7 +86,8 @@ export function CreateScoringScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   safe: { flex: 1 },
   title: { marginTop: 12, marginBottom: 4, marginHorizontal: 24, fontSize: 26, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary },
   body: { padding: 24, paddingTop: 18 },

@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { TiebreakReason } from '../lib/tournament';
-import { colors } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 export interface TiebreakEntry {
   neighborName: string;
@@ -44,6 +45,8 @@ function sentenceFor(playerName: string, entry: TiebreakEntry): string {
 }
 
 export function TiebreakInfoModal({ visible, playerName, points, entries, onClose }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
@@ -74,30 +77,31 @@ export function TiebreakInfoModal({ visible, playerName, points, entries, onClos
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(4,10,25,.6)' },
-  centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  modal: {
-    backgroundColor: '#12274a',
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.hairlineStrong,
-    padding: 24,
-    paddingTop: 22,
-  },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 6 },
-  title: { flex: 1, fontSize: 19, fontWeight: '900', color: colors.textPrimary, letterSpacing: -0.4 },
-  subtitle: { fontSize: 13, color: colors.textMuted, marginBottom: 14, lineHeight: 18 },
-  line: {
-    fontSize: 13,
-    color: colors.textPrimary,
-    lineHeight: 19,
-    backgroundColor: colors.surfaceSunken,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-  },
-  closeBtn: { height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 16, backgroundColor: colors.lime },
-  closeText: { fontWeight: '800', fontSize: 15, color: colors.courtNavy },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(4,10,25,.6)' },
+    centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
+    modal: {
+      backgroundColor: colors.surface,
+      borderRadius: 26,
+      borderWidth: 1,
+      borderColor: colors.hairlineStrong,
+      padding: 24,
+      paddingTop: 22,
+    },
+    head: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 6 },
+    title: { flex: 1, fontSize: 19, fontWeight: '900', color: colors.textPrimary, letterSpacing: -0.4 },
+    subtitle: { fontSize: 13, color: colors.textMuted, marginBottom: 14, lineHeight: 18 },
+    line: {
+      fontSize: 13,
+      color: colors.textPrimary,
+      lineHeight: 19,
+      backgroundColor: colors.surfaceSunken,
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.hairline,
+    },
+    closeBtn: { height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 16, backgroundColor: colors.lime },
+    closeText: { fontWeight: '800', fontSize: 15, color: colors.courtNavy },
+  });

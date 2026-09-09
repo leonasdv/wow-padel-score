@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 const WORDMARK_ASPECT = 880 / 310;
 
@@ -10,6 +10,7 @@ interface Props {
 }
 
 export function WowLogo({ size = 22, subtitle = false }: Props) {
+  const { colors } = useTheme();
   const height = size * 1.15;
   const width = height * WORDMARK_ASPECT;
   return (

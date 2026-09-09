@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
@@ -9,11 +9,15 @@ import { InfoBox, ScreenBackground, StepHeader } from '../../components/Misc';
 import { useDraft } from '../../data/draft';
 import { makeId } from '../../lib/id';
 import type { RootStackParamList } from '../../navigation/types';
-import { colors, radius } from '../../theme/tokens';
+import type { ColorPalette } from '../../theme/tokens';
+import { radius } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 
 export function CreateCourtsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { draft, setDraft } = useDraft();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const setCount = (n: number) => {
     setDraft((d) => {
@@ -71,28 +75,6 @@ export function CreateCourtsScreen() {
             ))}
           </View>
 
-          <Text style={styles.sectionLabel}>Number of rounds</Text>
-          <View style={styles.roundsRow}>
-            <Text style={styles.roundsLabel}>Rounds to play</Text>
-            <View style={styles.roundsControls}>
-              <Pressable
-                style={styles.roundsBtn}
-                onPress={() => setDraft((d) => ({ ...d, numRounds: Math.max(1, d.numRounds - 1) }))}
-              >
-                <Text style={styles.roundsBtnText}>–</Text>
-              </Pressable>
-              <View style={styles.roundsValue}>
-                <Text style={styles.roundsValueText}>{draft.numRounds}</Text>
-              </View>
-              <Pressable
-                style={[styles.roundsBtn, { backgroundColor: colors.white06 }]}
-                onPress={() => setDraft((d) => ({ ...d, numRounds: Math.min(30, d.numRounds + 1) }))}
-              >
-                <Text style={[styles.roundsBtnText, { color: colors.textPrimary }]}>+</Text>
-              </Pressable>
-            </View>
-          </View>
-
           <View style={{ marginTop: 16 }}>
             <InfoBox text="Add your players next. You can also add more rounds later if there's time left." />
           </View>
@@ -105,7 +87,8 @@ export function CreateCourtsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   safe: { flex: 1 },
   headBlock: { paddingHorizontal: 24, paddingTop: 12 },
   title: { fontSize: 26, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary },
@@ -141,21 +124,5 @@ const styles = StyleSheet.create({
   },
   nameIndex: { fontSize: 12, fontWeight: '800', color: colors.textFaint, width: 16 },
   nameInput: { flex: 1, fontWeight: '700', fontSize: 15, color: colors.textPrimary, padding: 0 },
-  roundsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surfaceSunken,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    borderRadius: 14,
-    padding: 12,
-  },
-  roundsLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', color: colors.textFaint },
-  roundsControls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  roundsBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: colors.white06, alignItems: 'center', justifyContent: 'center' },
-  roundsBtnText: { fontSize: 22, fontWeight: '800', color: colors.textMuted },
-  roundsValue: { minWidth: 64, height: 52, paddingHorizontal: 12, borderRadius: 13, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
-  roundsValueText: { fontSize: 30, fontWeight: '800', color: colors.lime },
   footer: { paddingHorizontal: 24, paddingBottom: 20 },
 });

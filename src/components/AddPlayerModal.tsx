@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import type { Gender } from '../types';
 
 interface Props {
@@ -13,6 +14,8 @@ interface Props {
 }
 
 export function AddPlayerModal({ visible, regenerationText, showGender = true, onClose, onConfirm }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [name, setName] = useState('');
   const [gender, setGender] = useState<Gender>('F');
   const isTeamMode = !showGender;
@@ -76,47 +79,48 @@ export function AddPlayerModal({ visible, regenerationText, showGender = true, o
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(4,10,25,.6)' },
-  centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  modal: {
-    backgroundColor: '#12274a',
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.hairlineStrong,
-    padding: 24,
-    paddingTop: 28,
-  },
-  warnIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,180,60,.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginBottom: 18,
-  },
-  title: { fontSize: 21, fontWeight: '900', color: colors.textPrimary, textAlign: 'center', letterSpacing: -0.4, marginBottom: 10 },
-  desc: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 21, marginBottom: 20 },
-  label: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase', color: colors.textFaint, marginBottom: 9 },
-  input: {
-    height: 54,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceSunken,
-    borderWidth: 1.5,
-    borderColor: colors.lime,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 12,
-  },
-  genderRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
-  genderBtn: { flex: 1, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white05, borderWidth: 1, borderColor: colors.hairlineStrong },
-  genderText: { fontWeight: '800', fontSize: 14, color: colors.textMuted },
-  confirmBtn: { height: 54, borderRadius: 14, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  confirmText: { fontWeight: '800', fontSize: 15, color: colors.courtNavy },
-  cancelBtn: { height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { fontWeight: '700', fontSize: 15, color: colors.textMuted },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(4,10,25,.6)' },
+    centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
+    modal: {
+      backgroundColor: colors.surface,
+      borderRadius: 26,
+      borderWidth: 1,
+      borderColor: colors.hairlineStrong,
+      padding: 24,
+      paddingTop: 28,
+    },
+    warnIcon: {
+      width: 60,
+      height: 60,
+      borderRadius: 18,
+      backgroundColor: 'rgba(255,180,60,.14)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      alignSelf: 'center',
+      marginBottom: 18,
+    },
+    title: { fontSize: 21, fontWeight: '900', color: colors.textPrimary, textAlign: 'center', letterSpacing: -0.4, marginBottom: 10 },
+    desc: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 21, marginBottom: 20 },
+    label: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase', color: colors.textFaint, marginBottom: 9 },
+    input: {
+      height: 54,
+      borderRadius: 14,
+      backgroundColor: colors.surfaceSunken,
+      borderWidth: 1.5,
+      borderColor: colors.lime,
+      paddingHorizontal: 16,
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 12,
+    },
+    genderRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
+    genderBtn: { flex: 1, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white05, borderWidth: 1, borderColor: colors.hairlineStrong },
+    genderText: { fontWeight: '800', fontSize: 14, color: colors.textMuted },
+    confirmBtn: { height: 54, borderRadius: 14, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+    confirmText: { fontWeight: '800', fontSize: 15, color: colors.courtNavy },
+    cancelBtn: { height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    cancelText: { fontWeight: '700', fontSize: 15, color: colors.textMuted },
+  });

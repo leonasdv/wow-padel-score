@@ -4,7 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '../components/Avatar';
 import { useEvents } from '../data/store';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import { computeStandings } from '../lib/tournament';
 
 interface Aggregate {
@@ -19,6 +21,8 @@ interface Aggregate {
 
 export function PlayersScreen() {
   const { events } = useEvents();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const roster = useMemo(() => {
     const map: Record<string, Aggregate> = {};
@@ -77,8 +81,8 @@ export function PlayersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.courtNavy },
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.screenBg },
   header: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 16 },
   title: { fontSize: 28, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary },
   subtitle: { marginTop: 4, fontSize: 14, color: colors.textMuted },

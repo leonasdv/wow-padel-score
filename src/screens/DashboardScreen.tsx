@@ -34,7 +34,9 @@ import {
   substituteParticipant,
 } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import { FORMAT_META, type Gender, type Match, type Round } from '../types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -71,6 +73,8 @@ export function DashboardScreen() {
   const route = useRoute<R>();
   const { getEvent, updateEvent, syncSharedScores } = useEvents();
   const event = getEvent(route.params.eventId);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [tab, setTab] = useState<'rounds' | 'standings'>(route.params.tab ?? 'rounds');
   const [sortBy, setSortBy] = useState<'points' | 'wins'>('points');
@@ -387,13 +391,13 @@ export function DashboardScreen() {
                             if (played) {
                               if (ownScore! > oppScore!) {
                                 resultLabel = 'Win';
-                                resultColor = colors.lime;
+                                resultColor = colors.win;
                               } else if (ownScore! < oppScore!) {
                                 resultLabel = 'Loss';
-                                resultColor = colors.textMuted;
+                                resultColor = colors.lose;
                               } else {
                                 resultLabel = 'Tie';
-                                resultColor = colors.amber;
+                                resultColor = colors.tie;
                               }
                             }
                             return (
@@ -462,7 +466,7 @@ export function DashboardScreen() {
                             ? { bg: colors.blueTint, fg: colors.blueText, border: colors.blueTintBorder }
                             : { bg: 'rgba(255,180,60,.14)', fg: colors.amber, border: colors.hairline };
                       const boxStyle = (filled: boolean, win: boolean) => ({
-                        backgroundColor: filled ? (win ? 'rgba(198,234,59,.16)' : colors.surfaceSunken) : 'rgba(255,255,255,.03)',
+                        backgroundColor: filled ? (win ? 'rgba(198,234,59,.16)' : colors.surfaceSunken) : colors.white05,
                         borderColor: win ? colors.lime : colors.hairlineStrong,
                         color: filled ? (win ? colors.lime : colors.textPrimary) : colors.textGhost,
                       });
@@ -652,7 +656,7 @@ export function DashboardScreen() {
                     key={s.player.id}
                     style={[
                       styles.standRow,
-                      { borderColor: top ? 'rgba(198,234,59,.18)' : colors.white05, backgroundColor: top ? 'rgba(198,234,59,.06)' : 'rgba(255,255,255,.02)' },
+                      { borderColor: top ? 'rgba(198,234,59,.18)' : colors.white05, backgroundColor: top ? 'rgba(198,234,59,.06)' : colors.white05 },
                     ]}
                   >
                     <View style={{ width: 34, alignItems: 'center' }}>
@@ -757,7 +761,7 @@ export function DashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   safe: { flex: 1 },
   header: { paddingHorizontal: 22, paddingTop: 6 },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

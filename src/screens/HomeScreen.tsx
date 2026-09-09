@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusPill } from '../components/Misc';
@@ -13,7 +13,9 @@ import { exportAllData, mergeEvents, pickBackupFile } from '../lib/backup';
 import { makeId } from '../lib/id';
 import { startEvent } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import { FORMAT_META, type WowEvent } from '../types';
 
 function formatDate(ts: number): string {
@@ -27,6 +29,8 @@ export function HomeScreen() {
   const { reset } = useDraft();
   const liveCount = events.filter((e) => e.status === 'live').length;
   const [backupBusy, setBackupBusy] = useState(false);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const onOpenEvent = (ev: WowEvent) => {
     if (ev.format === 'knockout') {
@@ -122,7 +126,9 @@ export function HomeScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <WowLogo size={22} subtitle />
+          <View style={styles.logoBadge}>
+            <WowLogo size={22} subtitle />
+          </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Pressable style={styles.backupBtn} onPress={onOpenBackupMenu} disabled={backupBusy} hitSlop={8}>
               <Ionicons name="cloud-upload-outline" size={18} color={backupBusy ? colors.textFaint : colors.textSecondary} />
@@ -188,10 +194,13 @@ export function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.courtNavy },
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.screenBg },
   header: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 20 },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // The wordmark image is pale artwork drawn for a dark backdrop — give it one always, regardless
+  // of app theme, instead of shipping a separate light-mode logo asset.
+  logoBadge: { backgroundColor: colors.courtNavy, borderRadius: radius.md, paddingVertical: 6, paddingHorizontal: 10 },
   avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
   backupBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.white06, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontWeight: '800', color: colors.lime, fontSize: 14 },

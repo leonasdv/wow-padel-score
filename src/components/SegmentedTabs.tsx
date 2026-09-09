@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 interface Props {
   options: { key: string; label: string }[];
@@ -10,6 +12,8 @@ interface Props {
 }
 
 export function SegmentedTabs({ options, value, onChange, size = 'lg' }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const isLg = size === 'lg';
   return (
     <View style={[styles.track, { padding: isLg ? 4 : 3, borderRadius: isLg ? 14 : 11 }]}>
@@ -36,15 +40,16 @@ export function SegmentedTabs({ options, value, onChange, size = 'lg' }: Props) 
   );
 }
 
-const styles = StyleSheet.create({
-  track: {
-    flexDirection: 'row',
-    backgroundColor: colors.surfaceSunken,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    gap: 4,
-  },
-  tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  active: { backgroundColor: colors.lime },
-  label: {},
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    track: {
+      flexDirection: 'row',
+      backgroundColor: colors.surfaceSunken,
+      borderWidth: 1,
+      borderColor: colors.hairline,
+      gap: 4,
+    },
+    tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    active: { backgroundColor: colors.lime },
+    label: {},
+  });

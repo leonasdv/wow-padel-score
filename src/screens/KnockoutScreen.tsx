@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Sharing from 'expo-sharing';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
@@ -16,7 +16,8 @@ import { shareOrCopyLink } from '../lib/clipboard';
 import { publishEvent, shareUrlFor } from '../lib/share';
 import { clearKnockoutScore, clearThirdPlaceScore, knockoutRoundName, replaceParticipant, setKnockoutScore, setThirdPlaceScore } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import type { Match } from '../types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -39,6 +40,8 @@ export function KnockoutScreen() {
   const route = useRoute<R>();
   const { getEvent, updateEvent } = useEvents();
   const event = getEvent(route.params.eventId);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [edit, setEdit] = useState<{ roundIndex: number; matchIndex: number; team: 'A' | 'B' } | null>(null);
   const [buffer, setBuffer] = useState('');
@@ -364,7 +367,7 @@ export function KnockoutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   safe: { flex: 1 },
   exportHiddenWrap: { position: 'absolute', top: 0, left: 0, opacity: 0 },
   exportCard: { backgroundColor: colors.courtNavy, padding: 24 },

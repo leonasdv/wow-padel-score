@@ -1,10 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 export function SupportScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
@@ -54,36 +58,37 @@ export function SupportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.courtNavy },
-  header: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
-  title: { fontSize: 28, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary },
-  subtitle: { marginTop: 4, fontSize: 14, color: colors.textMuted },
-  body: { padding: 20, gap: 16, paddingBottom: 120 },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    borderRadius: radius.xxl,
-    padding: 18,
-  },
-  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 16 },
-  cardTitle: { fontSize: 15, fontWeight: '800', color: colors.textPrimary },
-  qrFrame: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 16, alignItems: 'center', justifyContent: 'center' },
-  qr: { width: '100%', aspectRatio: 1, borderRadius: 8 },
-  qrHint: { marginTop: 12, fontSize: 12, color: colors.textFaint, textAlign: 'center' },
-  bankRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  bankBadge: {
-    width: 58,
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bankBadgeText: { color: '#0a55c8', fontWeight: '900', fontSize: 18, fontStyle: 'italic', letterSpacing: -0.5 },
-  account: { fontSize: 24, fontWeight: '900', color: colors.lime, letterSpacing: 1, fontVariant: ['tabular-nums'] },
-  holder: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  thanks: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
-  thanksText: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.screenBg },
+    header: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
+    title: { fontSize: 28, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary },
+    subtitle: { marginTop: 4, fontSize: 14, color: colors.textMuted },
+    body: { padding: 20, gap: 16, paddingBottom: 120 },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.hairline,
+      borderRadius: radius.xxl,
+      padding: 18,
+    },
+    cardHead: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 16 },
+    cardTitle: { fontSize: 15, fontWeight: '800', color: colors.textPrimary },
+    qrFrame: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 16, alignItems: 'center', justifyContent: 'center' },
+    qr: { width: '100%', aspectRatio: 1, borderRadius: 8 },
+    qrHint: { marginTop: 12, fontSize: 12, color: colors.textFaint, textAlign: 'center' },
+    bankRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    bankBadge: {
+      width: 58,
+      height: 42,
+      borderRadius: 10,
+      backgroundColor: '#fff',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    bankBadgeText: { color: '#0a55c8', fontWeight: '900', fontSize: 18, fontStyle: 'italic', letterSpacing: -0.5 },
+    account: { fontSize: 24, fontWeight: '900', color: colors.lime, letterSpacing: 1, fontVariant: ['tabular-nums'] },
+    holder: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+    thanks: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
+    thanksText: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
+  });

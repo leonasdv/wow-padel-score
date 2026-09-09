@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import type { Gender } from '../types';
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function GenderToggle({ value, onChange, compact }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={[styles.wrap, compact && styles.wrapCompact]}>
       <Pressable
@@ -28,10 +31,11 @@ export function GenderToggle({ value, onChange, compact }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', backgroundColor: colors.surfaceSunken, borderRadius: 10, padding: 3, gap: 3 },
-  wrapCompact: { borderRadius: 10, padding: 3, gap: 3 },
-  btn: { width: 30, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  btnCompact: { width: 30, height: 28, borderRadius: 8 },
-  label: { fontSize: 13, fontWeight: '800' },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    wrap: { flexDirection: 'row', backgroundColor: colors.surfaceSunken, borderRadius: 10, padding: 3, gap: 3 },
+    wrapCompact: { borderRadius: 10, padding: 3, gap: 3 },
+    btn: { width: 30, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    btnCompact: { width: 30, height: 28, borderRadius: 8 },
+    label: { fontSize: 13, fontWeight: '800' },
+  });

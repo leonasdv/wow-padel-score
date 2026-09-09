@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 interface Props {
   label: string;
@@ -9,6 +11,8 @@ interface Props {
 }
 
 export function Chip({ label, active, onPress }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable
       onPress={onPress}
@@ -19,9 +23,10 @@ export function Chip({ label, active, onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  chip: { paddingVertical: 9, paddingHorizontal: 15, borderRadius: radius.round },
-  active: { backgroundColor: colors.lime },
-  inactive: { backgroundColor: colors.white06, borderWidth: 1, borderColor: colors.hairlineStrong },
-  label: { fontSize: 13, fontWeight: '700' },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    chip: { paddingVertical: 9, paddingHorizontal: 15, borderRadius: radius.round },
+    active: { backgroundColor: colors.lime },
+    inactive: { backgroundColor: colors.white06, borderWidth: 1, borderColor: colors.hairlineStrong },
+    label: { fontSize: 13, fontWeight: '700' },
+  });

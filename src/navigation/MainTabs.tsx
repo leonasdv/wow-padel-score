@@ -6,7 +6,7 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { PlayersScreen } from '../screens/PlayersScreen';
 import { ResultsScreen } from '../screens/ResultsScreen';
 import { SupportScreen } from '../screens/SupportScreen';
-import { colors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import type { MainTabsParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabsParamList>();
@@ -14,6 +14,7 @@ const Tab = createBottomTabNavigator<MainTabsParamList>();
 export function MainTabs() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 12);
+  const { colors } = useTheme();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -21,7 +22,7 @@ export function MainTabs() {
         tabBarActiveTintColor: colors.lime,
         tabBarInactiveTintColor: colors.textFaint,
         tabBarStyle: {
-          backgroundColor: '#0a1a34',
+          backgroundColor: colors.surfaceSunken,
           borderTopColor: colors.hairline,
           borderTopWidth: 1,
           height: 62 + bottomInset,

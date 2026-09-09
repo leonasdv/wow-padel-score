@@ -7,11 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { computeStandings, sortStandings } from '../lib/tournament';
 import { useEvents } from '../data/store';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 export function ResultsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { events } = useEvents();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const ended = useMemo(() => events.filter((e) => e.status === 'done'), [events]);
 
   return (
@@ -57,8 +61,8 @@ export function ResultsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.courtNavy },
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.screenBg },
   header: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 16 },
   title: { fontSize: 28, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary },
   subtitle: { marginTop: 4, fontSize: 14, color: colors.textMuted },

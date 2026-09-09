@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 interface Props extends TextInputProps {
   label?: string;
@@ -9,6 +11,8 @@ interface Props extends TextInputProps {
 }
 
 export function TextField({ label, rightHint, dark, style, onFocus, onBlur, ...rest }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [focused, setFocused] = useState(false);
   return (
     <View>
@@ -36,24 +40,25 @@ export function TextField({ label, rightHint, dark, style, onFocus, onBlur, ...r
   );
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    color: colors.textFaint,
-    marginBottom: 10,
-  },
-  input: {
-    height: 60,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    paddingHorizontal: 18,
-    fontSize: 19,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  hint: { fontSize: 12, color: colors.textFaint, marginTop: 10, textAlign: 'right' },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    label: {
+      fontSize: 12,
+      fontWeight: '800',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+      color: colors.textFaint,
+      marginBottom: 10,
+    },
+    input: {
+      height: 60,
+      borderRadius: radius.lg,
+      backgroundColor: colors.surface,
+      borderWidth: 1.5,
+      paddingHorizontal: 18,
+      fontSize: 19,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    hint: { fontSize: 12, color: colors.textFaint, marginTop: 10, textAlign: 'right' },
+  });

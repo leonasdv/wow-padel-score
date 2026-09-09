@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { extractReclubUrl, fetchReclubConfirmedNames } from '../lib/reclub';
-import { colors } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 type Status = 'idle' | 'loading' | 'error' | 'success';
 
@@ -14,6 +15,8 @@ interface Props {
 }
 
 export function ImportReclubModal({ visible, isTeamMode, onClose, onImport }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [text, setText] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState('');
@@ -143,63 +146,64 @@ export function ImportReclubModal({ visible, isTeamMode, onClose, onImport }: Pr
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(4,10,25,.6)' },
-  centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  modal: {
-    backgroundColor: '#12274a',
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.hairlineStrong,
-    padding: 24,
-    paddingTop: 26,
-    maxHeight: '82%',
-  },
-  title: { fontSize: 19, fontWeight: '900', color: colors.textPrimary, letterSpacing: -0.3, marginBottom: 4 },
-  desc: { fontSize: 13, color: colors.textSecondary, lineHeight: 19, marginBottom: 16 },
-  textarea: {
-    minHeight: 120,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceSunken,
-    borderWidth: 1.5,
-    borderColor: colors.hairlineStrong,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.textPrimary,
-    textAlignVertical: 'top',
-    marginBottom: 12,
-  },
-  error: { fontSize: 13, color: colors.amber, marginBottom: 12 },
-  label: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase', color: colors.textFaint, marginBottom: 10 },
-  list: { marginBottom: 10 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceSunken,
-    borderWidth: 1.5,
-    borderColor: colors.hairline,
-    paddingHorizontal: 14,
-  },
-  rowOn: { borderColor: colors.lime },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    borderWidth: 1.5,
-    borderColor: colors.hairlineStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: colors.lime, borderWidth: 0 },
-  rowName: { flex: 1, fontWeight: '700', fontSize: 14, color: colors.textPrimary },
-  hint: { fontSize: 12, color: colors.textFaint, marginBottom: 14, lineHeight: 16 },
-  confirmBtn: { height: 54, borderRadius: 14, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  confirmText: { fontWeight: '800', fontSize: 15, color: colors.courtNavy },
-  cancelBtn: { height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { fontWeight: '700', fontSize: 15, color: colors.textMuted },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(4,10,25,.6)' },
+    centerWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
+    modal: {
+      backgroundColor: colors.surface,
+      borderRadius: 26,
+      borderWidth: 1,
+      borderColor: colors.hairlineStrong,
+      padding: 24,
+      paddingTop: 26,
+      maxHeight: '82%',
+    },
+    title: { fontSize: 19, fontWeight: '900', color: colors.textPrimary, letterSpacing: -0.3, marginBottom: 4 },
+    desc: { fontSize: 13, color: colors.textSecondary, lineHeight: 19, marginBottom: 16 },
+    textarea: {
+      minHeight: 120,
+      borderRadius: 16,
+      backgroundColor: colors.surfaceSunken,
+      borderWidth: 1.5,
+      borderColor: colors.hairlineStrong,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.textPrimary,
+      textAlignVertical: 'top',
+      marginBottom: 12,
+    },
+    error: { fontSize: 13, color: colors.amber, marginBottom: 12 },
+    label: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase', color: colors.textFaint, marginBottom: 10 },
+    list: { marginBottom: 10 },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      height: 48,
+      borderRadius: 14,
+      backgroundColor: colors.surfaceSunken,
+      borderWidth: 1.5,
+      borderColor: colors.hairline,
+      paddingHorizontal: 14,
+    },
+    rowOn: { borderColor: colors.lime },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 7,
+      borderWidth: 1.5,
+      borderColor: colors.hairlineStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkboxOn: { backgroundColor: colors.lime, borderWidth: 0 },
+    rowName: { flex: 1, fontWeight: '700', fontSize: 14, color: colors.textPrimary },
+    hint: { fontSize: 12, color: colors.textFaint, marginBottom: 14, lineHeight: 16 },
+    confirmBtn: { height: 54, borderRadius: 14, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+    confirmText: { fontWeight: '800', fontSize: 15, color: colors.courtNavy },
+    cancelBtn: { height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    cancelText: { fontWeight: '700', fontSize: 15, color: colors.textMuted },
+  });

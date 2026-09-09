@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
@@ -14,7 +14,9 @@ import { useEvents } from '../../data/store';
 import { makeId } from '../../lib/id';
 import { estimateRoundsForMatchesPerPlayer, isTeamFormat, knockoutRoundName, matchesPerPlayerIsFeasible, startEvent } from '../../lib/tournament';
 import type { RootStackParamList } from '../../navigation/types';
-import { colors, radius } from '../../theme/tokens';
+import type { ColorPalette } from '../../theme/tokens';
+import { radius } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeContext';
 import type { Gender, Player, WowEvent } from '../../types';
 
 const MAX_PLAYERS = 48;
@@ -23,6 +25,8 @@ export function CreatePlayersScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { draft, setDraft } = useDraft();
   const { addEvent } = useEvents();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -262,7 +266,7 @@ export function CreatePlayersScreen() {
               />
             </View>
             {matchesPerPlayer == null && (
-              <Text style={styles.matchesHint}>Leave blank to keep the {draft.numRounds} rounds from the previous step.</Text>
+              <Text style={styles.matchesHint}>Leave blank to play {draft.numRounds} rounds by default.</Text>
             )}
             {matchesPerPlayer != null && !matchesFeasible && (
               <Text style={[styles.matchesHint, { color: colors.amber }]}>
@@ -285,7 +289,8 @@ export function CreatePlayersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   safe: { flex: 1 },
   headRow: { paddingHorizontal: 24, paddingTop: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 26, fontWeight: '900', letterSpacing: -1, color: colors.textPrimary },

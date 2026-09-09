@@ -15,7 +15,9 @@ import { useEvents } from '../data/store';
 import { Alert } from '../lib/alert';
 import { computeStandings, sortStandings } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type R = RouteProp<RootStackParamList, 'ResultCard'>;
@@ -35,6 +37,8 @@ export function ResultCardScreen() {
   const route = useRoute<R>();
   const { getEvent, updateEvent } = useEvents();
   const event = getEvent(route.params.eventId);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const viewShotRef = useRef<ViewShotRef>(null);
   const [busy, setBusy] = useState(false);
   const [sortBy, setSortBy] = useState<'points' | 'wins'>('points');
@@ -358,8 +362,8 @@ export function ResultCardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.courtNavy },
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.screenBg },
   header: { paddingHorizontal: 22, paddingTop: 6 },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.white06, alignItems: 'center', justifyContent: 'center' },

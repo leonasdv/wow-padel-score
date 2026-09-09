@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
@@ -16,7 +16,9 @@ import { makeId } from '../lib/id';
 import { editorShareUrlFor, publishEvent, setShareInputSource, shareUrlFor, unpublishEvent } from '../lib/share';
 import { addPlayerMidEvent, isRankingBased, isTeamFormat, toggleBench } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, radius } from '../theme/tokens';
+import type { ColorPalette } from '../theme/tokens';
+import { radius } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import type { Gender } from '../types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -27,6 +29,8 @@ export function EditEventScreen() {
   const route = useRoute<R>();
   const { getEvent, updateEvent } = useEvents();
   const event = getEvent(route.params.eventId);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<'event' | 'court' | 'player'>('player');
   const [editInitial, setEditInitial] = useState('');
@@ -311,7 +315,7 @@ export function EditEventScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   safe: { flex: 1 },
   header: { paddingHorizontal: 22, paddingTop: 6 },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
