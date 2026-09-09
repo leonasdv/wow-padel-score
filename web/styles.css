@@ -46,6 +46,9 @@ body {
 }
 
 #app { max-width: 640px; margin: 0 auto; min-height: 100vh; padding-bottom: 40px; }
+@media (min-width: 860px) {
+  #app { max-width: 1200px; }
+}
 
 .state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 14px; text-align: center; padding: 24px; }
 .state p { margin: 0; color: var(--text-muted); }
@@ -76,10 +79,18 @@ h1 { margin: 14px 0 4px; font-size: 26px; font-weight: 900; letter-spacing: -0.5
 main { padding: 12px 20px 0; }
 
 .round-block { margin-bottom: 22px; }
-.round-title { font-size: 15px; font-weight: 900; margin: 0 0 10px; }
+.round-block.round-past { opacity: 0.72; }
+.round-title { font-size: 15px; font-weight: 900; margin: 0 0 10px; display: flex; align-items: center; flex-wrap: wrap; row-gap: 6px; }
 .round-title span { font-weight: 700; color: var(--text-faint); font-size: 13px; margin-left: 6px; }
+.round-live-tag { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; padding: 3px 9px; border-radius: 999px; background: var(--blue-tint); border: 1px solid var(--blue-tint-border); color: var(--blue-text); font-size: 11px; font-weight: 800; letter-spacing: 0.5px; }
+.round-live-tag::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--blue-text); }
 
-.court-card { border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface); padding: 12px 14px; margin-bottom: 10px; }
+/* Every court's card for a round, laid out as a responsive grid — naturally stays a single
+   column on a phone-width viewport, but spreads courts side by side on a wider one (see the
+   #app max-width bump above), so all of a round's live matches fit on one screen. */
+.courts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+
+.court-card { border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface); padding: 12px 14px; margin-bottom: 0; }
 .court-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .court-name { font-size: 12px; font-weight: 800; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; }
 .status-badge { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; letter-spacing: 0.5px; }

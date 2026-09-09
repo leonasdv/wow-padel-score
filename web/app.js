@@ -275,53 +275,73 @@
     return '<div class="' + cls + '" id="' + boxId + '" onclick="' + onclick + '">' + text + '</div>';
   }
 
-  function renderRounds(event, isEditable) {
-    var html = '';
-    event.rounds.forEach(function (round) {
-      var isCurrentRound = round.index === event.currentRoundIndex;
-      html += '<div class="round-block"><h2 class="round-title">Round ' + round.index + '<span>of ' + event.totalRoundsEstimate + '</span></h2>';
-      event.courts.forEach(function (court) {
-        var m = round.matches.find(function (mm) { return mm.courtId === court.id; });
-        if (!m) {
-          html +=
-            '<div class="court-card"><div class="court-top"><span class="court-name">' +
-            esc(court.name) +
-            '</span><span class="status-badge status-idle">IDLE</span></div><p class="idle-text">No match this round</p></div>';
-          return;
-        }
-        var done = m.scoreA != null && m.scoreB != null;
-        var winA = done && m.scoreA > m.scoreB;
-        var winB = done && m.scoreB > m.scoreA;
-        var status = done ? 'DONE' : isCurrentRound ? 'LIVE' : 'WAITING';
-        var statusClass = done ? 'status-done' : isCurrentRound ? 'status-live' : 'status-waiting';
-        var editableHere = isEditable && isCurrentRound;
-
+  // Renders one round's block — every court's card side by side in a grid, so on a wide
+  // (laptop) viewport the whole round's live matches fit on one screen instead of a long scroll.
+  function renderRoundBlock(event, round, isEditable, isCurrentRound) {
+    var html =
+      '<div class="round-block' + (isCurrentRound ? ' round-current' : ' round-past') + '">' +
+      '<h2 class="round-title">Round ' + round.index + '<span>of ' + event.totalRoundsEstimate + '</span>' +
+      (isCurrentRound ? '<span class="round-live-tag">LIVE NOW</span>' : '') +
+      '</h2><div class="courts-grid">';
+    event.courts.forEach(function (court) {
+      var m = round.matches.find(function (mm) { return mm.courtId === court.id; });
+      if (!m) {
         html +=
           '<div class="court-card"><div class="court-top"><span class="court-name">' +
           esc(court.name) +
-          '</span><span class="status-badge ' +
-          statusClass +
-          '">' +
-          status +
-          '</span></div><div class="match-row">' +
-          '<div class="team">' +
-          m.teamA.map(function (pid) { return '<span class="player-line">' + esc(shortName(playerName(event.players, pid))) + '</span>'; }).join('') +
-          '</div>' +
-          scoreBoxHtml(round.index, court.id, 'A', m.scoreA, m.scoreA != null, winA, editableHere) +
-          '<span class="vs">vs</span>' +
-          scoreBoxHtml(round.index, court.id, 'B', m.scoreB, m.scoreB != null, winB, editableHere) +
-          '<div class="team right">' +
-          m.teamB.map(function (pid) { return '<span class="player-line">' + esc(shortName(playerName(event.players, pid))) + '</span>'; }).join('') +
-          '</div></div></div>';
-      });
-      if (round.sitOuts && round.sitOuts.length) {
-        html +=
-          '<p class="sit-outs">' +
-          (isTeamFormat(event.format) ? 'Bye this round: ' : 'Sitting out: ') +
-          esc(round.sitOuts.map(function (id) { return playerName(event.players, id); }).join(', ')) +
-          '</p>';
+          '</span><span class="status-badge status-idle">IDLE</span></div><p class="idle-text">No match this round</p></div>';
+        return;
       }
-      html += '</div>';
+      var done = m.scoreA != null && m.scoreB != null;
+      var winA = done && m.scoreA > m.scoreB;
+      var winB = done && m.scoreB > m.scoreA;
+      var status = done ? 'DONE' : isCurrentRound ? 'LIVE' : 'WAITING';
+      var statusClass = done ? 'status-done' : isCurrentRound ? 'status-live' : 'status-waiting';
+      var editableHere = isEditable && isCurrentRound;
+
+      html +=
+        '<div class="court-card"><div class="court-top"><span class="court-name">' +
+        esc(court.name) +
+        '</span><span class="status-badge ' +
+        statusClass +
+        '">' +
+        status +
+        '</span></div><div class="match-row">' +
+        '<div class="team">' +
+        m.teamA.map(function (pid) { return '<span class="player-line">' + esc(shortName(playerName(event.players, pid))) + '</span>'; }).join('') +
+        '</div>' +
+        scoreBoxHtml(round.index, court.id, 'A', m.scoreA, m.scoreA != null, winA, editableHere) +
+        '<span class="vs">vs</span>' +
+        scoreBoxHtml(round.index, court.id, 'B', m.scoreB, m.scoreB != null, winB, editableHere) +
+        '<div class="team right">' +
+        m.teamB.map(function (pid) { return '<span class="player-line">' + esc(shortName(playerName(event.players, pid))) + '</span>'; }).join('') +
+        '</div></div></div>';
+    });
+    html += '</div>';
+    if (round.sitOuts && round.sitOuts.length) {
+      html +=
+        '<p class="sit-outs">' +
+        (isTeamFormat(event.format) ? 'Bye this round: ' : 'Sitting out: ') +
+        esc(round.sitOuts.map(function (id) { return playerName(event.players, id); }).join(', ')) +
+        '</p>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // The live round always renders first — regardless of how many rounds have already been
+  // played, the courts you actually care about right now are never buried below a long scroll
+  // of finished ones. Past (and any already-generated future) rounds still follow below it.
+  function renderRounds(event, isEditable) {
+    // A finished event has no "live" round left to promote — currentRoundIndex still points at
+    // whichever round finished last, but it's just as past as every other one now.
+    var isLiveEvent = event.status === 'live';
+    var currentRound = isLiveEvent ? event.rounds.find(function (r) { return r.index === event.currentRoundIndex; }) : null;
+    var otherRounds = currentRound ? event.rounds.filter(function (r) { return r.index !== event.currentRoundIndex; }) : event.rounds;
+    var html = '';
+    if (currentRound) html += renderRoundBlock(event, currentRound, isEditable, true);
+    otherRounds.forEach(function (round) {
+      html += renderRoundBlock(event, round, isEditable, false);
     });
     els.roundsPane.innerHTML = html;
   }
