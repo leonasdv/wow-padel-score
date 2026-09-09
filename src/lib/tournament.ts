@@ -222,6 +222,17 @@ export function createFixedTeams(players: Player[]): FixedTeam[] {
   return players.map((p) => ({ id: makeId('team'), playerIds: [p.id] }));
 }
 
+/** Roster entries eligible for future matches — benched players/teams stay in the roster but never get scheduled. */
+function activePlayers(players: Player[]): Player[] {
+  return players.filter((p) => !p.benched);
+}
+
+/** Fixed teams whose player isn't currently benched — same idea as {@link activePlayers} for team formats. */
+function activeFixedTeams(fixedTeams: FixedTeam[], players: Player[]): FixedTeam[] {
+  const benchedIds = new Set(players.filter((p) => p.benched).map((p) => p.id));
+  return fixedTeams.filter((t) => !t.playerIds.some((pid) => benchedIds.has(pid)));
+}
+
 interface TeamHistory {
   appearances: Record<string, number>;
   opponentCount: Record<string, number>;
@@ -716,14 +727,14 @@ export function advanceRound(event: WowEvent): WowEvent {
   if (event.format === 'team_mexicano') {
     const standings = computeStandings({ ...event, rounds });
     const history = deriveTeamHistory(event.fixedTeams!, rounds);
-    const newRound = generateTeamMexicanoRound(event.fixedTeams!, event.courts, nextIndex, standings, history, event.matchesPerPlayer);
+    const newRound = generateTeamMexicanoRound(activeFixedTeams(event.fixedTeams!, event.players), event.courts, nextIndex, standings, history, event.matchesPerPlayer);
     return { ...event, rounds: [...rounds, newRound], currentRoundIndex: nextIndex };
   }
   if (event.format === 'team_americano' || !isRankingBased(event.format)) {
     return { ...event, rounds, currentRoundIndex: nextIndex };
   }
   const standings = computeStandings({ ...event, rounds });
-  const newRound = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, nextIndex, standings, rounds, event.matchesPerPlayer);
+  const newRound = generateRankingRound(event.format as 'mexicano' | 'mixicano', activePlayers(event.players), event.courts, nextIndex, standings, rounds, event.matchesPerPlayer);
   return { ...event, rounds: [...rounds, newRound], currentRoundIndex: nextIndex };
 }
 
@@ -739,7 +750,7 @@ export function extendRounds(event: WowEvent, additionalRounds: number): WowEven
 
   if (event.format === 'team_americano') {
     const seed = deriveTeamHistory(event.fixedTeams!, event.rounds);
-    const extra = generateTeamAmericanoSchedule(event.fixedTeams!, event.courts, additionalRounds, event.rounds.length, seed);
+    const extra = generateTeamAmericanoSchedule(activeFixedTeams(event.fixedTeams!, event.players), event.courts, additionalRounds, event.rounds.length, seed);
     const rounds = [...event.rounds, ...extra];
     const currentRoundIndex = wasFinished ? event.currentRoundIndex + 1 : event.currentRoundIndex;
     return { ...event, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex, status: 'live' };
@@ -750,7 +761,7 @@ export function extendRounds(event: WowEvent, additionalRounds: number): WowEven
     const standings = computeStandings(event);
     const history = deriveTeamHistory(event.fixedTeams!, event.rounds);
     const nextIndex = event.currentRoundIndex + 1;
-    const newRound = generateTeamMexicanoRound(event.fixedTeams!, event.courts, nextIndex, standings, history);
+    const newRound = generateTeamMexicanoRound(activeFixedTeams(event.fixedTeams!, event.players), event.courts, nextIndex, standings, history);
     return { ...event, rounds: [...event.rounds, newRound], totalRoundsEstimate, currentRoundIndex: nextIndex, status: 'live' };
   }
   if (isRankingBased(event.format)) {
@@ -758,11 +769,11 @@ export function extendRounds(event: WowEvent, additionalRounds: number): WowEven
     if (!wasFinished) return { ...event, totalRoundsEstimate, status: 'live' };
     const standings = computeStandings(event);
     const nextIndex = event.currentRoundIndex + 1;
-    const newRound = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, nextIndex, standings, event.rounds);
+    const newRound = generateRankingRound(event.format as 'mexicano' | 'mixicano', activePlayers(event.players), event.courts, nextIndex, standings, event.rounds);
     return { ...event, rounds: [...event.rounds, newRound], totalRoundsEstimate, currentRoundIndex: nextIndex, status: 'live' };
   }
   const seed = deriveRotationHistory(event.players, event.rounds);
-  const extra = generateRotationSchedule(event.format, event.players, event.courts, additionalRounds, event.rounds.length, seed);
+  const extra = generateRotationSchedule(event.format, activePlayers(event.players), event.courts, additionalRounds, event.rounds.length, seed);
   const rounds = [...event.rounds, ...extra];
   const currentRoundIndex = wasFinished ? event.currentRoundIndex + 1 : event.currentRoundIndex;
   return { ...event, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex, status: 'live' };
@@ -777,7 +788,7 @@ export function addPlayerMidEvent(event: WowEvent, player: Player): WowEvent {
   if (event.format === 'team_americano') {
     const fixedTeams = createFixedTeams(players);
     const seed = deriveTeamHistory(fixedTeams, completed);
-    const regenerated = generateTeamAmericanoSchedule(fixedTeams, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
+    const regenerated = generateTeamAmericanoSchedule(activeFixedTeams(fixedTeams, players), event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
     const rounds = [...completed, ...regenerated];
     return { ...event, players, fixedTeams, rounds, totalRoundsEstimate: rounds.length };
   }
@@ -785,55 +796,19 @@ export function addPlayerMidEvent(event: WowEvent, player: Player): WowEvent {
     const fixedTeams = createFixedTeams(players);
     const standings = computeStandings({ ...event, players, rounds: completed });
     const history = deriveTeamHistory(fixedTeams, completed);
-    const newCurrent = generateTeamMexicanoRound(fixedTeams, event.courts, event.currentRoundIndex, standings, history, event.matchesPerPlayer);
+    const newCurrent = generateTeamMexicanoRound(activeFixedTeams(fixedTeams, players), event.courts, event.currentRoundIndex, standings, history, event.matchesPerPlayer);
     return { ...event, players, fixedTeams, rounds: [...completed, newCurrent] };
   }
   if (!isRankingBased(event.format)) {
     const seed = deriveRotationHistory(players, completed);
-    const regenerated = generateRotationSchedule(event.format, players, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
+    const regenerated = generateRotationSchedule(event.format, activePlayers(players), event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
     const rounds = [...completed, ...regenerated];
     return { ...event, players, rounds, totalRoundsEstimate: rounds.length };
   }
   // Ranking formats keep the original totalRoundsEstimate as-is here — recomputing it against the
   // new roster would need each player's already-completed count seeded in, not just a fresh target.
   const standings = computeStandings({ ...event, players, rounds: completed });
-  const newCurrent = generateRankingRound(event.format as 'mexicano' | 'mixicano', players, event.courts, event.currentRoundIndex, standings, completed, event.matchesPerPlayer);
-  return { ...event, players, rounds: [...completed, newCurrent] };
-}
-
-/** Minimum roster size the event format needs to keep running at least one match. */
-export function minPlayersFor(format: Format): number {
-  return isTeamFormat(format) ? 2 : 4;
-}
-
-/** Removes a player/team from the roster entirely, regenerating not-yet-completed rounds without them. Completed rounds keep their historical record untouched. */
-export function removePlayer(event: WowEvent, playerId: string): WowEvent {
-  const players = event.players.filter((p) => p.id !== playerId);
-  const completed = event.rounds.filter((r) => r.completed);
-  const remaining = Math.max(event.totalRoundsEstimate - completed.length, 1);
-
-  if (event.format === 'team_americano') {
-    const fixedTeams = createFixedTeams(players);
-    const seed = deriveTeamHistory(fixedTeams, completed);
-    const regenerated = generateTeamAmericanoSchedule(fixedTeams, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
-    const rounds = [...completed, ...regenerated];
-    return { ...event, players, fixedTeams, rounds, totalRoundsEstimate: rounds.length };
-  }
-  if (event.format === 'team_mexicano') {
-    const fixedTeams = createFixedTeams(players);
-    const standings = computeStandings({ ...event, players, rounds: completed });
-    const history = deriveTeamHistory(fixedTeams, completed);
-    const newCurrent = generateTeamMexicanoRound(fixedTeams, event.courts, event.currentRoundIndex, standings, history, event.matchesPerPlayer);
-    return { ...event, players, fixedTeams, rounds: [...completed, newCurrent] };
-  }
-  if (!isRankingBased(event.format)) {
-    const seed = deriveRotationHistory(players, completed);
-    const regenerated = generateRotationSchedule(event.format, players, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
-    const rounds = [...completed, ...regenerated];
-    return { ...event, players, rounds, totalRoundsEstimate: rounds.length };
-  }
-  const standings = computeStandings({ ...event, players, rounds: completed });
-  const newCurrent = generateRankingRound(event.format as 'mexicano' | 'mixicano', players, event.courts, event.currentRoundIndex, standings, completed, event.matchesPerPlayer);
+  const newCurrent = generateRankingRound(event.format as 'mexicano' | 'mixicano', activePlayers(players), event.courts, event.currentRoundIndex, standings, completed, event.matchesPerPlayer);
   return { ...event, players, rounds: [...completed, newCurrent] };
 }
 
@@ -844,24 +819,63 @@ export function reshuffleUpcoming(event: WowEvent): WowEvent {
 
   if (event.format === 'team_americano') {
     const seed = deriveTeamHistory(event.fixedTeams!, completed);
-    const regenerated = generateTeamAmericanoSchedule(event.fixedTeams!, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
+    const regenerated = generateTeamAmericanoSchedule(activeFixedTeams(event.fixedTeams!, event.players), event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
     return { ...event, rounds: [...completed, ...regenerated] };
   }
   if (event.format === 'team_mexicano') {
     const standings = computeStandings({ ...event, rounds: completed });
     const history = deriveTeamHistory(event.fixedTeams!, completed);
-    const cur = generateTeamMexicanoRound(event.fixedTeams!, event.courts, event.currentRoundIndex, standings, history, event.matchesPerPlayer);
+    const cur = generateTeamMexicanoRound(activeFixedTeams(event.fixedTeams!, event.players), event.courts, event.currentRoundIndex, standings, history, event.matchesPerPlayer);
     return { ...event, rounds: [...completed, cur] };
   }
   if (!isRankingBased(event.format)) {
     const seed = deriveRotationHistory(event.players, completed);
-    const regenerated = generateRotationSchedule(event.format, event.players, event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
+    const regenerated = generateRotationSchedule(event.format, activePlayers(event.players), event.courts, remaining, completed.length, seed, event.matchesPerPlayer);
     return { ...event, rounds: [...completed, ...regenerated] };
   }
   // Ranking formats build one round at a time from standings — regenerate just the current round.
   const standings = computeStandings({ ...event, rounds: completed });
-  const cur = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, event.currentRoundIndex, standings, completed, event.matchesPerPlayer);
+  const cur = generateRankingRound(event.format as 'mexicano' | 'mixicano', activePlayers(event.players), event.courts, event.currentRoundIndex, standings, completed, event.matchesPerPlayer);
   return { ...event, rounds: [...completed, cur] };
+}
+
+/**
+ * Benches (or un-benches) a player/team in place. A bench never touches completed rounds or the
+ * round currently in progress — even if the benched player already has a match there — it only
+ * takes effect from the next round onward. For formats whose whole schedule is generated in one
+ * batch upfront (Americano / Mix Americano / Team Americano), that means regenerating every round
+ * after the current live one, right away, without the benched player; formats that build one round
+ * at a time from live standings (Mexicano / Mixicano / Team Mexicano) have nothing pre-generated
+ * beyond the live round, so flipping the flag is enough — the next round they generate (see
+ * {@link advanceRound}) already leaves a benched player out, and brings them back the moment
+ * they're un-benched.
+ */
+export function toggleBench(event: WowEvent, playerId: string): WowEvent {
+  const target = event.players.find((p) => p.id === playerId);
+  if (!target) return event;
+  const players = event.players.map((p) => (p.id === playerId ? { ...p, benched: !p.benched } : p));
+  const updated = { ...event, players };
+
+  if (event.format === 'knockout') return updated; // bracket is fixed at creation — nothing to regenerate
+
+  const kept = event.rounds.filter((r) => r.completed || r.index <= event.currentRoundIndex);
+  const remaining = event.totalRoundsEstimate - kept.length;
+  if (remaining <= 0) return updated; // current round is already the last one — nothing ahead to regenerate
+
+  if (event.format === 'team_americano') {
+    const fixedTeams = createFixedTeams(players);
+    const seed = deriveTeamHistory(fixedTeams, kept);
+    const regenerated = generateTeamAmericanoSchedule(activeFixedTeams(fixedTeams, players), event.courts, remaining, kept.length, seed, event.matchesPerPlayer);
+    const rounds = [...kept, ...regenerated];
+    return { ...updated, fixedTeams, rounds, totalRoundsEstimate: rounds.length };
+  }
+  if (event.format === 'team_mexicano' || isRankingBased(event.format)) {
+    return updated; // one round at a time — the next generated round already excludes the bench
+  }
+  const seed = deriveRotationHistory(players, kept);
+  const regenerated = generateRotationSchedule(event.format, activePlayers(players), event.courts, remaining, kept.length, seed, event.matchesPerPlayer);
+  const rounds = [...kept, ...regenerated];
+  return { ...updated, rounds, totalRoundsEstimate: rounds.length };
 }
 
 /** Substitutes a participant with a new name in place — keeps their schedule slot and any completed-match scores. */

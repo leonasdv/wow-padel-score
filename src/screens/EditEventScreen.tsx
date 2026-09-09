@@ -14,7 +14,7 @@ import { Alert } from '../lib/alert';
 import { copyLinkWithFeedback, shareOrCopyLink } from '../lib/clipboard';
 import { makeId } from '../lib/id';
 import { editorShareUrlFor, publishEvent, setShareInputSource, shareUrlFor, unpublishEvent } from '../lib/share';
-import { addPlayerMidEvent, isRankingBased, isTeamFormat, minPlayersFor, removePlayer } from '../lib/tournament';
+import { addPlayerMidEvent, isRankingBased, isTeamFormat, toggleBench } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, radius } from '../theme/tokens';
 import type { Gender } from '../types';
@@ -79,21 +79,10 @@ export function EditEventScreen() {
   };
 
   const entityWord = isTeamFormat(event.format) ? 'team' : 'player';
-  const minPlayers = minPlayersFor(event.format);
   const isKnockout = event.format === 'knockout';
   // Knockout brackets are fixed at creation — adding/removing entrants isn't supported once built.
   const canEditRoster = event.status === 'live' && !isKnockout;
 
-  const onDeletePlayer = (id: string, name: string) => {
-    if (event.players.length <= minPlayers) {
-      Alert.alert(`Can't remove ${entityWord}`, `This event needs at least ${minPlayers} ${entityWord}s to keep running.`);
-      return;
-    }
-    Alert.alert(`Remove ${name}?`, `They'll be taken out of the roster and every upcoming round will be regenerated without them. Completed rounds keep their recorded scores.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => updateEvent(event.id, (e) => removePlayer(e, id)) },
-    ]);
-  };
   const regenerationText = isRankingBased(event.format) || event.format === 'team_mexicano'
     ? `Adding a ${entityWord} now will affect pairings once Round ${event.currentRoundIndex} ends. Completed rounds and current standings stay untouched.`
     : `Adding a ${entityWord} now will regenerate upcoming rounds (${event.currentRoundIndex + 1}–${event.totalRoundsEstimate}). Completed rounds and current standings stay untouched.`;
@@ -101,6 +90,10 @@ export function EditEventScreen() {
   const onAddPlayer = async (name: string, gender: Gender) => {
     setAddPlayerVisible(false);
     await updateEvent(event.id, (e) => addPlayerMidEvent(e, { id: makeId('player'), name, gender }));
+  };
+
+  const onToggleBench = (id: string) => {
+    updateEvent(event.id, (e) => toggleBench(e, id));
   };
 
   const onToggleShare = async (value: boolean) => {
@@ -263,18 +256,27 @@ export function EditEventScreen() {
               </Pressable>
             )}
           </View>
-          <Text style={styles.editHint}>{canEditRoster ? '🗑 remove · ✎ fix the name' : '✎ fix the name'}</Text>
+          <Text style={styles.editHint}>{canEditRoster ? '⏸ bench · ✎ fix the name' : '✎ fix the name'}</Text>
           <View style={{ gap: 9 }}>
             {event.players.map((p) => (
-              <View key={p.id} style={styles.playerRow}>
+              <View key={p.id} style={[styles.playerRow, p.benched && styles.playerRowBenched]}>
                 <Avatar name={p.name} gender={p.gender} size={32} />
-                <Text style={styles.playerName} numberOfLines={1}>
+                <Text style={[styles.playerName, p.benched && styles.playerNameBenched]} numberOfLines={1}>
                   {p.name}
                 </Text>
+                {p.benched && (
+                  <View style={styles.benchBadge}>
+                    <Text style={styles.benchBadgeText}>⏸ BENCHED</Text>
+                  </View>
+                )}
                 <View style={{ flexDirection: 'row', gap: 14 }}>
                   {canEditRoster && (
-                    <Pressable onPress={() => onDeletePlayer(p.id, p.name)} hitSlop={8}>
-                      <Ionicons name="trash-outline" size={17} color={colors.textFaint} />
+                    <Pressable onPress={() => onToggleBench(p.id)} hitSlop={8}>
+                      <Ionicons
+                        name={p.benched ? 'play-circle-outline' : 'pause-circle-outline'}
+                        size={19}
+                        color={p.benched ? colors.lime : colors.textFaint}
+                      />
                     </Pressable>
                   )}
                   <Pressable onPress={() => startRenamePlayer(p.id, p.name)} hitSlop={8}>
@@ -328,5 +330,9 @@ const styles = StyleSheet.create({
   rowIndex: { fontSize: 12, fontWeight: '800', color: colors.textFaint, width: 16 },
   rowText: { flex: 1, fontWeight: '700', fontSize: 15, color: colors.textPrimary },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: 11, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.hairline, borderRadius: 13, padding: 8, paddingHorizontal: 12 },
+  playerRowBenched: { opacity: 0.6 },
   playerName: { flex: 1, fontWeight: '700', fontSize: 14, color: colors.textPrimary },
+  playerNameBenched: { textDecorationLine: 'line-through', color: colors.textFaint },
+  benchBadge: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: 8, backgroundColor: colors.white06 },
+  benchBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4, color: colors.textFaint },
 });

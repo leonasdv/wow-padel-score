@@ -228,7 +228,9 @@ export function CreatePlayersScreen() {
                     {isSelected && <Ionicons name="checkmark" size={13} color={colors.courtNavy} />}
                   </Pressable>
                 ) : (
-                  <Text style={styles.idx}>{index + 1}</Text>
+                  <Text style={styles.idx} numberOfLines={1}>
+                    {index + 1}
+                  </Text>
                 )}
                 <Avatar name={item.name} gender={item.gender} />
                 <Text style={styles.name} numberOfLines={1}>
@@ -337,7 +339,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 12,
   },
-  idx: { fontSize: 12, fontWeight: '800', color: colors.textFaint, width: 16, fontVariant: ['tabular-nums'] },
+  idx: { fontSize: 12, fontWeight: '800', color: colors.textFaint, width: 20, flexShrink: 0, textAlign: 'center', fontVariant: ['tabular-nums'] },
   name: { flex: 1, fontWeight: '700', fontSize: 15, color: colors.textPrimary },
   matchesSection: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 4 },
   matchesRow: {

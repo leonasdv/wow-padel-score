@@ -17,6 +17,8 @@ export interface Player {
   id: string;
   name: string;
   gender: Gender;
+  /** Benched — sits out of every round from here on (past and in-progress rounds are unaffected) until un-benched. */
+  benched?: boolean;
 }
 
 export interface Court {

@@ -665,6 +665,11 @@ export function DashboardScreen() {
                       <Text style={styles.standName} numberOfLines={1}>
                         {s.player.name}
                       </Text>
+                      {s.player.benched && (
+                        <View style={styles.benchMark}>
+                          <Text style={styles.benchMarkText}>||</Text>
+                        </View>
+                      )}
                       {tiebreakEntries.length > 0 && (
                         <Pressable
                           hitSlop={8}
@@ -847,6 +852,8 @@ const styles = StyleSheet.create({
   rankBadge: { minWidth: 26, height: 26, paddingHorizontal: 5, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   rankText: { fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'] },
   standName: { fontWeight: '700', fontSize: 14, color: colors.textPrimary, flexShrink: 1 },
+  benchMark: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5, backgroundColor: colors.white06 },
+  benchMarkText: { fontSize: 11, fontWeight: '900', color: colors.textFaint, letterSpacing: 0.5 },
   standCell: { fontSize: 14, fontVariant: ['tabular-nums'], color: colors.textPrimary },
   standPts: { width: 40, textAlign: 'right', fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
 });
