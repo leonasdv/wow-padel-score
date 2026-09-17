@@ -43,6 +43,11 @@ function decodeHtmlEntities(raw: string): string {
  * section heading (waitlist/invited). Both that heading and the event organizer avatars
  * above it reuse the same avatar-name <p> class, so the search must start after the
  * confirmed heading to avoid picking up the organizer names.
+ *
+ * Players who brought a guest get a "+1" badge that reuses the exact same "font-bold
+ * text-lg" class as the section headings, so the next-heading search must skip it —
+ * otherwise it mistakes the first "+1" badge for the waitlist heading and truncates the
+ * confirmed list right after that player.
  */
 export function parseConfirmedNames(html: string): string[] {
   const heading = html.match(/<p[^>]*>\s*(?:Dikonfirmasi|Confirmed)[\s\S]{0,80}?<\/p>/i);
@@ -50,7 +55,7 @@ export function parseConfirmedNames(html: string): string[] {
 
   const start = heading.index + heading[0].length;
   const rest = html.slice(start, start + 20000);
-  const nextHeading = rest.search(/<p[^>]*class="[^"]*font-bold text-lg[^"]*"/i);
+  const nextHeading = rest.search(/<p[^>]*class="[^"]*font-bold text-lg[^"]*"[^>]*>(?!\s*\+\d)/i);
   const segment = nextHeading === -1 ? rest : rest.slice(0, nextHeading);
 
   const names: string[] = [];
