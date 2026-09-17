@@ -19,6 +19,8 @@ export interface Player {
   gender: Gender;
   /** Benched — sits out of every round from here on (past and in-progress rounds are unaffected) until un-benched. */
   benched?: boolean;
+  /** Set at creation time only — excludes this player from round 1's pairings; they join normally from round 2 onward. Cleared once rounds are generated. */
+  skipFirstRound?: boolean;
 }
 
 export interface Court {

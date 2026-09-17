@@ -74,6 +74,13 @@ export function CreatePlayersScreen() {
     setDraft((d) => ({ ...d, players: d.players.map((p) => (p.id === id ? { ...p, gender } : p)) }));
   };
 
+  const toggleSkipFirstRound = (id: string) => {
+    setDraft((d) => ({
+      ...d,
+      players: d.players.map((p) => (p.id === id ? { ...p, skipFirstRound: !p.skipFirstRound } : p)),
+    }));
+  };
+
   const removePlayer = (id: string) => {
     setDraft((d) => ({ ...d, players: d.players.filter((p) => p.id !== id) }));
     setSelectedForLink((prev) => prev.filter((pid) => pid !== id));
@@ -104,6 +111,9 @@ export function CreatePlayersScreen() {
   };
 
   const minRequired = isTeamMode ? 2 : isKnockout ? 3 : 4;
+  const skippingFirstRound = !isKnockout ? draft.players.filter((p) => p.skipFirstRound).length : 0;
+  const round1Count = draft.players.length - skippingFirstRound;
+  const round1Valid = skippingFirstRound === 0 || round1Count >= minRequired;
 
   const matchesPerPlayer = draft.matchesPerPlayer;
   const matchesInputText = matchesPerPlayer != null ? String(matchesPerPlayer) : '';
@@ -117,7 +127,7 @@ export function CreatePlayersScreen() {
       ? estimateRoundsForMatchesPerPlayer(draft.format, draft.players, draft.courts, matchesPerPlayer)
       : null;
 
-  const canGenerate = draft.players.length >= minRequired && !busy && (isKnockout || matchesFeasible);
+  const canGenerate = draft.players.length >= minRequired && round1Valid && !busy && (isKnockout || matchesFeasible);
 
   let bracketHint = 'Add at least 3 players to build a bracket.';
   if (isKnockout && draft.players.length >= minRequired) {
@@ -221,6 +231,7 @@ export function CreatePlayersScreen() {
           }
           renderItem={({ item, index }) => {
             const isSelected = selectedForLink.includes(item.id);
+            const skipsFirstRound = !!item.skipFirstRound;
             return (
               <View style={[styles.row, isTeamMode && isSelected && styles.rowSelected]}>
                 {isTeamMode ? (
@@ -237,10 +248,22 @@ export function CreatePlayersScreen() {
                   </Text>
                 )}
                 <Avatar name={item.name} gender={item.gender} />
-                <Text style={styles.name} numberOfLines={1}>
-                  {item.name}
-                </Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  {skipsFirstRound && <Text style={styles.skipTag}>Skips round 1</Text>}
+                </View>
                 {showGender && <GenderToggle value={item.gender} onChange={(g) => setGender(item.id, g)} />}
+                {!isKnockout && (
+                  <Pressable onPress={() => toggleSkipFirstRound(item.id)} hitSlop={8}>
+                    <Ionicons
+                      name={skipsFirstRound ? 'play-skip-forward' : 'play-skip-forward-outline'}
+                      size={18}
+                      color={skipsFirstRound ? colors.amber : colors.textFaint}
+                    />
+                  </Pressable>
+                )}
                 <Pressable onPress={() => removePlayer(item.id)} hitSlop={8} style={{ marginLeft: 8 }}>
                   <Ionicons name="close" size={16} color={colors.textFaint} />
                 </Pressable>
@@ -248,6 +271,13 @@ export function CreatePlayersScreen() {
             );
           }}
         />
+
+        {!isKnockout && !round1Valid && (
+          <Text style={[styles.hint, { color: colors.amber, marginTop: 0, marginBottom: 8 }]}>
+            At least {minRequired} {isTeamMode ? 'teams' : 'players'} must play round 1 — uncheck "skip round 1" for some{' '}
+            {isTeamMode ? 'teams' : 'players'}.
+          </Text>
+        )}
 
         <ImportReclubModal visible={showImport} isTeamMode={isTeamMode} onClose={() => setShowImport(false)} onImport={importNames} />
 
@@ -346,6 +376,7 @@ const makeStyles = (colors: ColorPalette) =>
   },
   idx: { fontSize: 12, fontWeight: '800', color: colors.textFaint, width: 20, flexShrink: 0, textAlign: 'center', fontVariant: ['tabular-nums'] },
   name: { flex: 1, fontWeight: '700', fontSize: 15, color: colors.textPrimary },
+  skipTag: { fontSize: 10, fontWeight: '800', color: colors.amber, marginTop: 1 },
   matchesSection: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 4 },
   matchesRow: {
     flexDirection: 'row',

@@ -233,6 +233,17 @@ function activeFixedTeams(fixedTeams: FixedTeam[], players: Player[]): FixedTeam
   return fixedTeams.filter((t) => !t.playerIds.some((pid) => benchedIds.has(pid)));
 }
 
+/** Roster entries that opted in to play the very first round — see {@link startEvent} for how anyone who skipped it catches up starting round 2. */
+function playersForFirstRound(players: Player[]): Player[] {
+  return players.filter((p) => !p.skipFirstRound);
+}
+
+/** Fixed teams whose player didn't opt to skip the first round — same idea as {@link playersForFirstRound} for team formats. */
+function fixedTeamsForFirstRound(fixedTeams: FixedTeam[], players: Player[]): FixedTeam[] {
+  const skipIds = new Set(players.filter((p) => p.skipFirstRound).map((p) => p.id));
+  return fixedTeams.filter((t) => !t.playerIds.some((pid) => skipIds.has(pid)));
+}
+
 interface TeamHistory {
   appearances: Record<string, number>;
   opponentCount: Record<string, number>;
@@ -689,32 +700,57 @@ export function startEvent(event: WowEvent, desiredRounds?: number, matchesPerPl
   if (event.format === 'knockout') {
     return startKnockout(event);
   }
+
+  // "Skip first round" only matters for round 1 itself — clear it here so it can't linger as a
+  // stale flag once it's been consumed (a live event has no more use for it).
+  const hasFirstRoundSkips = event.players.some((p) => p.skipFirstRound);
+  const round1Players = playersForFirstRound(event.players);
+  const players = event.players.map((p) => (p.skipFirstRound ? { ...p, skipFirstRound: false } : p));
+
   if (event.format === 'team_americano') {
-    const fixedTeams = createFixedTeams(event.players);
-    const target = desiredRounds ?? estimateRounds(event.players.length, event.courts.length);
-    const rounds = generateTeamAmericanoSchedule(fixedTeams, event.courts, target, 0, undefined, matchesPerPlayer);
-    return { ...event, fixedTeams, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
+    const fixedTeams = createFixedTeams(players);
+    const target = desiredRounds ?? estimateRounds(players.length, event.courts.length);
+    let rounds: Round[];
+    if (!hasFirstRoundSkips) {
+      rounds = generateTeamAmericanoSchedule(fixedTeams, event.courts, target, 0, undefined, matchesPerPlayer);
+    } else {
+      const round1Teams = fixedTeamsForFirstRound(fixedTeams, event.players);
+      const round1 = generateTeamAmericanoSchedule(round1Teams, event.courts, 1, 0, undefined, undefined);
+      const seed = deriveTeamHistory(fixedTeams, round1);
+      const rest = generateTeamAmericanoSchedule(fixedTeams, event.courts, Math.max(target - round1.length, 0), round1.length, seed, matchesPerPlayer);
+      rounds = [...round1, ...rest];
+    }
+    return { ...event, players, fixedTeams, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
   }
   if (event.format === 'team_mexicano') {
-    const fixedTeams = createFixedTeams(event.players);
-    const round = generateTeamMexicanoRound(fixedTeams, event.courts, 1, [], { appearances: {}, opponentCount: {} }, matchesPerPlayer);
+    const fixedTeams = createFixedTeams(players);
+    const round1Teams = hasFirstRoundSkips ? fixedTeamsForFirstRound(fixedTeams, event.players) : fixedTeams;
+    const round = generateTeamMexicanoRound(round1Teams, event.courts, 1, [], { appearances: {}, opponentCount: {} }, matchesPerPlayer);
     const totalRoundsEstimate =
       matchesPerPlayer != null
-        ? estimateRoundsForMatchesPerPlayer(event.format, event.players, event.courts, matchesPerPlayer)
-        : (desiredRounds ?? estimateRounds(event.players.length, event.courts.length));
-    return { ...event, fixedTeams, rounds: [round], totalRoundsEstimate, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
+        ? estimateRoundsForMatchesPerPlayer(event.format, players, event.courts, matchesPerPlayer)
+        : (desiredRounds ?? estimateRounds(players.length, event.courts.length));
+    return { ...event, players, fixedTeams, rounds: [round], totalRoundsEstimate, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
   }
   if (isRankingBased(event.format)) {
-    const round = generateRankingRound(event.format as 'mexicano' | 'mixicano', event.players, event.courts, 1, [], [], matchesPerPlayer);
+    const round = generateRankingRound(event.format as 'mexicano' | 'mixicano', round1Players, event.courts, 1, [], [], matchesPerPlayer);
     const totalRoundsEstimate =
       matchesPerPlayer != null
-        ? estimateRoundsForMatchesPerPlayer(event.format, event.players, event.courts, matchesPerPlayer)
-        : (desiredRounds ?? estimateRounds(event.players.length, event.courts.length));
-    return { ...event, rounds: [round], totalRoundsEstimate, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
+        ? estimateRoundsForMatchesPerPlayer(event.format, players, event.courts, matchesPerPlayer)
+        : (desiredRounds ?? estimateRounds(players.length, event.courts.length));
+    return { ...event, players, rounds: [round], totalRoundsEstimate, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
   }
-  const totalRoundsEstimate = desiredRounds ?? estimateRounds(event.players.length, event.courts.length);
-  const rounds = generateRotationSchedule(event.format, event.players, event.courts, totalRoundsEstimate, 0, undefined, matchesPerPlayer);
-  return { ...event, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
+  const totalRoundsEstimate = desiredRounds ?? estimateRounds(players.length, event.courts.length);
+  let rounds: Round[];
+  if (!hasFirstRoundSkips) {
+    rounds = generateRotationSchedule(event.format, players, event.courts, totalRoundsEstimate, 0, undefined, matchesPerPlayer);
+  } else {
+    const round1 = generateRotationSchedule(event.format, round1Players, event.courts, 1, 0, undefined, undefined);
+    const seed = deriveRotationHistory(players, round1);
+    const rest = generateRotationSchedule(event.format, players, event.courts, Math.max(totalRoundsEstimate - round1.length, 0), round1.length, seed, matchesPerPlayer);
+    rounds = [...round1, ...rest];
+  }
+  return { ...event, players, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex: 1, status: 'live', matchesPerPlayer };
 }
 
 export function advanceRound(event: WowEvent): WowEvent {
