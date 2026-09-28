@@ -5,6 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
+import { QrCodeModal } from '../components/QrCodeModal';
 import { RenameModal } from '../components/RenameModal';
 import { Avatar } from '../components/Avatar';
 import { ScreenBackground } from '../components/Misc';
@@ -37,6 +38,7 @@ export function EditEventScreen() {
   const [addPlayerVisible, setAddPlayerVisible] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
   const [inputSourceBusy, setInputSourceBusy] = useState(false);
+  const [qrVisible, setQrVisible] = useState(false);
 
   if (!event) {
     return (
@@ -117,11 +119,6 @@ export function EditEventScreen() {
     }
   };
 
-  const onShareLink = () => {
-    if (!event.shareId) return;
-    shareOrCopyLink(shareUrlFor(event.shareId));
-  };
-
   const onCopyLink = async () => {
     if (!event.shareId) return;
     await copyLinkWithFeedback(shareUrlFor(event.shareId));
@@ -192,9 +189,9 @@ export function EditEventScreen() {
                 <Ionicons name="copy-outline" size={15} color={colors.textPrimary} />
                 <Text style={styles.linkActionText}>Copy link</Text>
               </Pressable>
-              <Pressable style={styles.linkAction} onPress={onShareLink}>
-                <Ionicons name="share-outline" size={15} color={colors.textPrimary} />
-                <Text style={styles.linkActionText}>Share</Text>
+              <Pressable style={styles.linkAction} onPress={() => setQrVisible(true)}>
+                <Ionicons name="qr-code-outline" size={15} color={colors.textPrimary} />
+                <Text style={styles.linkActionText}>Show QR</Text>
               </Pressable>
             </View>
           )}
@@ -310,6 +307,10 @@ export function EditEventScreen() {
           onClose={() => setAddPlayerVisible(false)}
           onConfirm={onAddPlayer}
         />
+
+        {event.shareId && (
+          <QrCodeModal visible={qrVisible} url={shareUrlFor(event.shareId)} onClose={() => setQrVisible(false)} />
+        )}
       </SafeAreaView>
     </ScreenBackground>
   );
