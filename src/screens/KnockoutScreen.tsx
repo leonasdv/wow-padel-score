@@ -8,11 +8,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
 import { Button } from '../components/Button';
 import { IconButton, LivePulseDot, ScreenBackground } from '../components/Misc';
+import { QrCodeModal } from '../components/QrCodeModal';
 import { ScoreKeypad } from '../components/ScoreKeypad';
 import { WowLogo } from '../components/WowLogo';
 import { useEvents } from '../data/store';
 import { Alert } from '../lib/alert';
-import { shareOrCopyLink } from '../lib/clipboard';
 import { publishEvent, shareUrlFor } from '../lib/share';
 import { clearKnockoutScore, clearThirdPlaceScore, knockoutRoundName, replaceParticipant, setKnockoutScore, setThirdPlaceScore } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
@@ -48,6 +48,7 @@ export function KnockoutScreen() {
   const [rename, setRename] = useState<{ id: string; text: string } | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
   const bracketShotRef = useRef<ViewShotRef>(null);
 
   if (!event) {
@@ -207,7 +208,7 @@ export function KnockoutScreen() {
         await updateEvent(event.id, () => published);
         target = published;
       }
-      await shareOrCopyLink(shareUrlFor(target.shareId!));
+      setQrUrl(shareUrlFor(target.shareId!));
     } catch (err: any) {
       Alert.alert('Something went wrong', err?.message ?? 'Could not create the share link. Check your connection and try again.');
     } finally {
@@ -362,6 +363,8 @@ export function KnockoutScreen() {
             </View>
           </View>
         </Modal>
+
+        <QrCodeModal visible={!!qrUrl} url={qrUrl ?? ''} onClose={() => setQrUrl(null)} />
       </SafeAreaView>
     </ScreenBackground>
   );

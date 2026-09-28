@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import qrcode from 'qrcode-generator';
 import React, { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { copyLinkWithFeedback } from '../lib/clipboard';
 import type { ColorPalette } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -62,9 +63,12 @@ export function QrCodeModal({ visible, url, onClose }: Props) {
               ))}
             </View>
           </View>
-          <Text style={styles.url} numberOfLines={2}>
-            {url}
-          </Text>
+          <Pressable style={styles.urlRow} onPress={() => copyLinkWithFeedback(url)}>
+            <Text style={styles.url} numberOfLines={2}>
+              {url}
+            </Text>
+            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+          </Pressable>
           <Pressable style={styles.closeBtn} onPress={onClose}>
             <Text style={styles.closeText}>Done</Text>
           </Pressable>
@@ -90,7 +94,20 @@ const makeStyles = (colors: ColorPalette) =>
     head: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 16 },
     title: { fontSize: 17, fontWeight: '900', color: colors.textPrimary, letterSpacing: -0.4 },
     qrFrame: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 16 },
-    url: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 16, marginBottom: 4 },
+    urlRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      marginTop: 16,
+      marginBottom: 4,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceSunken,
+      borderWidth: 1,
+      borderColor: colors.hairline,
+    },
+    url: { flex: 1, fontSize: 12, color: colors.textMuted },
     closeBtn: { alignSelf: 'stretch', height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 12, backgroundColor: colors.lime },
     closeText: { fontWeight: '800', fontSize: 15, color: colors.courtNavy },
   });

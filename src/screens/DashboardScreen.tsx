@@ -8,12 +8,12 @@ import { AddPlayerModal } from '../components/AddPlayerModal';
 import { Button } from '../components/Button';
 import { IconButton, LivePulseDot, ScreenBackground } from '../components/Misc';
 import { PlayerPickerModal } from '../components/PlayerPickerModal';
+import { QrCodeModal } from '../components/QrCodeModal';
 import { ScoreKeypad } from '../components/ScoreKeypad';
 import { SegmentedTabs } from '../components/SegmentedTabs';
 import { TiebreakInfoModal, type TiebreakEntry } from '../components/TiebreakInfoModal';
 import { useEvents } from '../data/store';
 import { Alert } from '../lib/alert';
-import { shareOrCopyLink } from '../lib/clipboard';
 import { makeId } from '../lib/id';
 import { publishEvent, shareUrlFor } from '../lib/share';
 import {
@@ -86,6 +86,7 @@ export function DashboardScreen() {
   const [roundsSearch, setRoundsSearch] = useState('');
   const [shareBusy, setShareBusy] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
 
   const searchResults = useMemo(() => {
     const q = roundsSearch.trim().toLowerCase();
@@ -128,7 +129,7 @@ export function DashboardScreen() {
         await updateEvent(event.id, () => published);
         target = published;
       }
-      await shareOrCopyLink(shareUrlFor(target.shareId!));
+      setQrUrl(shareUrlFor(target.shareId!));
     } catch (err: any) {
       Alert.alert('Something went wrong', err?.message ?? 'Could not create the share link. Check your connection and try again.');
     } finally {
@@ -756,6 +757,8 @@ export function DashboardScreen() {
           onPick={confirmSwap}
           onClose={() => setSwapOutgoing(null)}
         />
+
+        <QrCodeModal visible={!!qrUrl} url={qrUrl ?? ''} onClose={() => setQrUrl(null)} />
       </SafeAreaView>
     </ScreenBackground>
   );
