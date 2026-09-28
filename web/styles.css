@@ -64,7 +64,9 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .header { padding: 24px 20px 8px; }
-.header-top { display: flex; justify-content: flex-end; }
+.header-top { display: flex; justify-content: space-between; align-items: center; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; background: var(--white06); border: 1px solid var(--hairline); color: var(--text-secondary); text-decoration: none; }
+.icon-btn:active { background: var(--white05); }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--blue-tint); border: 1px solid var(--blue-tint-border); color: var(--blue-text); font-size: 12px; font-weight: 800; letter-spacing: 0.5px; }
 .pill.ended { background: var(--white06); border-color: var(--hairline); color: var(--text-faint); }
 .pill.dot::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--blue-text); }
