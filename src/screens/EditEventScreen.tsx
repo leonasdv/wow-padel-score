@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { QrCodeModal } from '../components/QrCodeModal';
@@ -12,9 +12,9 @@ import { ScreenBackground } from '../components/Misc';
 import { SegmentedTabs } from '../components/SegmentedTabs';
 import { useEvents } from '../data/store';
 import { Alert } from '../lib/alert';
-import { copyLinkWithFeedback, shareOrCopyLink } from '../lib/clipboard';
+import { copyLinkWithFeedback } from '../lib/clipboard';
 import { makeId } from '../lib/id';
-import { editorShareUrlFor, publishEvent, setShareInputSource, shareUrlFor, unpublishEvent } from '../lib/share';
+import { editorShareUrlFor, publishEvent, setShareInputSource } from '../lib/share';
 import { addPlayerMidEvent, isRankingBased, isTeamFormat, toggleBench } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import type { ColorPalette } from '../theme/tokens';
@@ -36,9 +36,23 @@ export function EditEventScreen() {
   const [editTarget, setEditTarget] = useState<'event' | 'court' | 'player'>('player');
   const [editInitial, setEditInitial] = useState('');
   const [addPlayerVisible, setAddPlayerVisible] = useState(false);
-  const [shareBusy, setShareBusy] = useState(false);
   const [inputSourceBusy, setInputSourceBusy] = useState(false);
   const [qrVisible, setQrVisible] = useState(false);
+
+  // The live share link is always on — publish it silently the first time this screen sees an
+  // unpublished event, instead of making the organizer flip a switch for it.
+  useEffect(() => {
+    if (!event || event.shareId) return;
+    let cancelled = false;
+    publishEvent(event)
+      .then((published) => {
+        if (!cancelled) updateEvent(event.id, () => published);
+      })
+      .catch((err) => console.warn('Failed to auto-publish event', event.id, err?.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [event?.id, event?.shareId]);
 
   if (!event) {
     return (
@@ -102,28 +116,6 @@ export function EditEventScreen() {
     updateEvent(event.id, (e) => toggleBench(e, id));
   };
 
-  const onToggleShare = async (value: boolean) => {
-    setShareBusy(true);
-    try {
-      if (value) {
-        const published = await publishEvent(event);
-        await updateEvent(event.id, () => published);
-      } else {
-        const unpublished = await unpublishEvent(event);
-        await updateEvent(event.id, () => unpublished);
-      }
-    } catch (err: any) {
-      Alert.alert('Something went wrong', err?.message ?? 'Could not update the share link. Check your connection and try again.');
-    } finally {
-      setShareBusy(false);
-    }
-  };
-
-  const onCopyLink = async () => {
-    if (!event.shareId) return;
-    await copyLinkWithFeedback(shareUrlFor(event.shareId));
-  };
-
   const onChangeInputSource = async (source: 'app' | 'web') => {
     if (source === (event.shareInputSource ?? 'app')) return;
     setInputSourceBusy(true);
@@ -138,11 +130,6 @@ export function EditEventScreen() {
   };
 
   const editorLink = event.shareId && event.editorToken ? editorShareUrlFor(event.shareId, event.editorToken) : null;
-
-  const onShareEditorLink = () => {
-    if (!editorLink) return;
-    shareOrCopyLink(editorLink);
-  };
 
   const onCopyEditorLink = async () => {
     if (!editorLink) return;
@@ -176,26 +163,6 @@ export function EditEventScreen() {
             </Pressable>
           </View>
 
-          <Text style={styles.sectionLabel}>Live share link</Text>
-          <View style={[styles.row, { marginBottom: event.shareId ? 10 : 24 }]}>
-            <Text style={styles.rowText} numberOfLines={1}>
-              {event.shareId ? 'Published — anyone with the link can watch live' : 'Publish a read-only link anyone can watch live'}
-            </Text>
-            <Switch value={!!event.shareId} onValueChange={onToggleShare} disabled={shareBusy} trackColor={{ true: colors.lime }} />
-          </View>
-          {event.shareId && (
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 24 }}>
-              <Pressable style={styles.linkAction} onPress={onCopyLink}>
-                <Ionicons name="copy-outline" size={15} color={colors.textPrimary} />
-                <Text style={styles.linkActionText}>Copy link</Text>
-              </Pressable>
-              <Pressable style={styles.linkAction} onPress={() => setQrVisible(true)}>
-                <Ionicons name="qr-code-outline" size={15} color={colors.textPrimary} />
-                <Text style={styles.linkActionText}>Show QR</Text>
-              </Pressable>
-            </View>
-          )}
-
           {event.shareId && !isKnockout && (
             <>
               <Text style={styles.sectionLabel}>Score entry</Text>
@@ -220,9 +187,9 @@ export function EditEventScreen() {
                     <Ionicons name="copy-outline" size={15} color={colors.textPrimary} />
                     <Text style={styles.linkActionText}>Copy link</Text>
                   </Pressable>
-                  <Pressable style={styles.linkAction} onPress={onShareEditorLink} disabled={inputSourceBusy}>
-                    <Ionicons name="share-outline" size={15} color={colors.textPrimary} />
-                    <Text style={styles.linkActionText}>Share</Text>
+                  <Pressable style={styles.linkAction} onPress={() => setQrVisible(true)} disabled={inputSourceBusy}>
+                    <Ionicons name="qr-code-outline" size={15} color={colors.textPrimary} />
+                    <Text style={styles.linkActionText}>Show QR</Text>
                   </Pressable>
                 </View>
               )}
@@ -308,8 +275,8 @@ export function EditEventScreen() {
           onConfirm={onAddPlayer}
         />
 
-        {event.shareId && (
-          <QrCodeModal visible={qrVisible} url={shareUrlFor(event.shareId)} onClose={() => setQrVisible(false)} />
+        {editorLink && (
+          <QrCodeModal visible={qrVisible} url={editorLink} onClose={() => setQrVisible(false)} />
         )}
       </SafeAreaView>
     </ScreenBackground>
