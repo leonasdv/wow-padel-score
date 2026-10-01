@@ -113,7 +113,7 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const syncAllWebEvents = useCallback(async () => {
-    const candidates = eventsRef.current.filter((e) => e.shareId && e.shareInputSource === 'web' && e.status === 'live');
+    const candidates = eventsRef.current.filter((e) => e.shareId && e.shareInputSource === 'web' && e.status !== 'draft');
     for (const ev of candidates) {
       await syncOne(ev);
     }

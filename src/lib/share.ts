@@ -10,6 +10,7 @@ function buildPayload(event: WowEvent) {
     name: event.name,
     format: event.format,
     scoringMode: event.scoringMode,
+    pot: event.pot, // lets the server's read-time score overlay apply total-mode scoring (other side = pot − score)
     courts: event.courts,
     players: event.players,
     rounds: event.rounds,

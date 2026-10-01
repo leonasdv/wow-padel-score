@@ -146,9 +146,10 @@
     els.statusPill.textContent = isLive ? 'LIVE' : 'ENDED';
     els.statusPill.className = 'pill' + (isLive ? '' : ' ended');
 
-    // Score entry from this link only ever applies to the current round, and only while the
-    // organizer has this event toggled to web input — never for knockout (out of scope for now).
-    var canEditHere = !!editorToken && isLive && event.format !== 'knockout';
+    // Score entry from this link covers every round (live, past corrections, upcoming), including
+    // after the event has ended, and only while the organizer has this event toggled to web
+    // input — never for knockout (out of scope for now).
+    var canEditHere = !!editorToken && (isLive || event.status === 'done') && event.format !== 'knockout';
     var isEditable = canEditHere && inputSource === 'web';
     if (canEditHere && inputSource !== 'web') {
       els.editorBanner.textContent = 'Scores are being entered from the app right now — ask the organizer to switch to this web link.';
@@ -264,8 +265,7 @@
     return 'score-box' + (filled ? (win ? ' win' : ' filled') : '');
   }
 
-  // `editable` is only ever true for the match's own round (renderRounds only passes it for the
-  // current round) — score entry from the web link never touches a past or future round.
+  // `editable` is true for every round's boxes while the event is toggled to web input.
   function scoreBoxHtml(roundIndex, courtId, team, value, filled, win, editable) {
     var text = filled ? value : '–';
     var boxId = 'score-' + roundIndex + '-' + courtId + '-' + team;
@@ -297,7 +297,7 @@
       var winB = done && m.scoreB > m.scoreA;
       var status = done ? 'DONE' : isCurrentRound ? 'LIVE' : 'WAITING';
       var statusClass = done ? 'status-done' : isCurrentRound ? 'status-live' : 'status-waiting';
-      var editableHere = isEditable && isCurrentRound;
+      var editableHere = isEditable;
 
       html +=
         '<div class="court-card"><div class="court-top"><span class="court-name">' +
@@ -432,6 +432,12 @@
       els.scoreModalError.hidden = false;
       return;
     }
+    var totalPot = currentEvent && currentEvent.scoringMode === 'total' ? Number(currentEvent.pot) : NaN;
+    if (Number.isFinite(totalPot) && value > totalPot) {
+      els.scoreModalError.textContent = 'Score can be at most ' + totalPot + '.';
+      els.scoreModalError.hidden = false;
+      return;
+    }
     var state = scoreModalState;
     els.scoreModalConfirmBtn.disabled = true;
     try {
@@ -454,7 +460,18 @@
       // Mark the box as syncing rather than pretending the value is already final — the
       // organizer's app still has to pull this submission and apply it before it's official.
       var box = document.getElementById('score-' + state.roundIndex + '-' + state.courtId + '-' + state.team);
-      if (box) { box.textContent = '…'; box.className = 'score-box pending'; }
+      var otherTeam = state.team === 'A' ? 'B' : 'A';
+      var otherBox = document.getElementById('score-' + state.roundIndex + '-' + state.courtId + '-' + otherTeam);
+      var pot = currentEvent && currentEvent.scoringMode === 'total' ? Number(currentEvent.pot) : NaN;
+      if (Number.isFinite(pot)) {
+        // Total mode: the app fills the other side as pot − score, so show both right away.
+        var shown = Math.max(0, Math.min(pot, Math.round(value)));
+        if (box) { box.textContent = String(shown); box.className = 'score-box pending'; }
+        if (otherBox) { otherBox.textContent = String(pot - shown); otherBox.className = 'score-box pending'; }
+      } else if (box) {
+        box.textContent = '…';
+        box.className = 'score-box pending';
+      }
       fetchEvent();
     } catch (e) {
       els.scoreModalError.textContent = 'Could not submit: ' + ((e && e.message) || e);
