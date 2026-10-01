@@ -56,9 +56,14 @@ create table if not exists public.shared_event_score_submissions (
   round_index int not null,
   court_id text not null,
   team text not null check (team in ('A', 'B')),
-  value int not null check (value >= 0),
+  value int not null,
   submitted_at timestamptz not null default now()
 );
+
+-- value = -1 is the "clear score" sentinel (match goes back to unscored); otherwise 0 or more.
+alter table public.shared_event_score_submissions drop constraint if exists shared_event_score_submissions_value_check;
+alter table public.shared_event_score_submissions add constraint shared_event_score_submissions_value_check
+  check (value >= -1);
 
 alter table public.shared_event_score_submissions enable row level security;
 revoke all on public.shared_event_score_submissions from anon, authenticated;
@@ -312,6 +317,7 @@ declare
   v_value int;
   v_other int;
   v_all_scored boolean;
+  v_rounds jsonb;
 begin
   select se.payload, se.updated_at, se.input_source
   into v_payload, v_updated_at, v_input_source
@@ -357,7 +363,28 @@ begin
       where ord.m->>'courtId' = v_sub.court_id
       limit 1;
 
-      if v_match_idx is not null then
+      if v_match_idx is not null and v_sub.value < 0 then
+        -- Mirrors clearScore in tournament.ts: unscore the match; if it sits behind the live round
+        -- (or the event already ended) rewind to it, and for standings-built formats drop the
+        -- later rounds, whose pairings were derived from the score being erased.
+        v_payload := jsonb_set(v_payload, array['rounds', v_round_idx::text, 'matches', v_match_idx::text, 'scoreA'], 'null'::jsonb);
+        v_payload := jsonb_set(v_payload, array['rounds', v_round_idx::text, 'matches', v_match_idx::text, 'scoreB'], 'null'::jsonb);
+
+        if not (v_sub.round_index >= v_current and v_status = 'live') then
+          select coalesce(jsonb_agg(
+            case when (t.r->>'index')::int >= v_sub.round_index
+                 then jsonb_set(t.r, '{completed}', 'false'::jsonb) else t.r end
+            order by t.ord
+          ), '[]'::jsonb)
+          into v_rounds
+          from jsonb_array_elements(v_payload->'rounds') with ordinality as t(r, ord)
+          where not (v_format in ('mexicano', 'mixicano', 'team_mexicano'))
+             or (t.r->>'index')::int <= v_sub.round_index;
+          v_payload := jsonb_set(v_payload, '{rounds}', v_rounds);
+          v_current := v_sub.round_index;
+          v_status := 'live';
+        end if;
+      elsif v_match_idx is not null then
         -- Same clamping / total-mode complement as setScore in tournament.ts.
         if v_scoring_mode = 'total' and v_pot is not null then
           v_value := greatest(0, least(v_pot, v_sub.value));

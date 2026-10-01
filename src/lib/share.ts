@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { applyScore, computeStandings, sortStandings } from './tournament';
+import { applyScore, clearScore, computeStandings, sortStandings } from './tournament';
 import { makeId } from './id';
 import { supabase } from './supabase';
 import type { WowEvent } from '../types';
@@ -122,7 +122,10 @@ export async function pullPendingScores(event: WowEvent): Promise<WowEvent> {
 
   let next = event;
   for (const row of rows) {
-    next = applyScore(next, row.round_index, row.court_id, row.team, row.value);
+    // value -1 is the web editor's "clear score" sentinel.
+    next = row.value < 0
+      ? clearScore(next, row.round_index, row.court_id)
+      : applyScore(next, row.round_index, row.court_id, row.team, row.value);
   }
 
   const { error: ackError } = await supabase.rpc('ack_score_submissions', {

@@ -48,6 +48,7 @@
     scoreModalTitle: document.getElementById('scoreModalTitle'),
     scoreModalInput: document.getElementById('scoreModalInput'),
     scoreModalError: document.getElementById('scoreModalError'),
+    scoreModalClearBtn: document.getElementById('scoreModalClearBtn'),
     scoreModalCancelBtn: document.getElementById('scoreModalCancelBtn'),
     scoreModalConfirmBtn: document.getElementById('scoreModalConfirmBtn'),
   };
@@ -415,6 +416,7 @@
     els.scoreModalTitle.textContent = matchLabel(roundIndex, courtId, team) + ' · Round ' + roundIndex;
     els.scoreModalInput.value = currentValue == null ? '' : currentValue;
     els.scoreModalError.hidden = true;
+    els.scoreModalClearBtn.hidden = currentValue == null; // nothing to clear on an unscored match
     els.scoreModalOverlay.hidden = false;
     els.scoreModalInput.focus();
   };
@@ -438,8 +440,19 @@
       els.scoreModalError.hidden = false;
       return;
     }
+    await submitScore(Math.round(value));
+  }
+
+  async function clearScoreModal() {
+    if (!scoreModalState) return;
+    await submitScore(-1); // -1 is the "clear score" sentinel understood by the backend and the app
+  }
+
+  async function submitScore(value) {
     var state = scoreModalState;
+    var isClear = value < 0;
     els.scoreModalConfirmBtn.disabled = true;
+    els.scoreModalClearBtn.disabled = true;
     try {
       var res = await fetch(CFG.supabaseUrl.replace(/\/$/, '') + '/rest/v1/rpc/submit_shared_score', {
         method: 'POST',
@@ -450,7 +463,7 @@
           p_round_index: state.roundIndex,
           p_court_id: state.courtId,
           p_team: state.team,
-          p_value: Math.round(value),
+          p_value: value,
         }),
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -463,9 +476,11 @@
       var otherTeam = state.team === 'A' ? 'B' : 'A';
       var otherBox = document.getElementById('score-' + state.roundIndex + '-' + state.courtId + '-' + otherTeam);
       var pot = currentEvent && currentEvent.scoringMode === 'total' ? Number(currentEvent.pot) : NaN;
-      if (Number.isFinite(pot)) {
+      if (isClear) {
+        [box, otherBox].forEach(function (b) { if (b) { b.textContent = '–'; b.className = 'score-box pending'; } });
+      } else if (Number.isFinite(pot)) {
         // Total mode: the app fills the other side as pot − score, so show both right away.
-        var shown = Math.max(0, Math.min(pot, Math.round(value)));
+        var shown = Math.max(0, Math.min(pot, value));
         if (box) { box.textContent = String(shown); box.className = 'score-box pending'; }
         if (otherBox) { otherBox.textContent = String(pot - shown); otherBox.className = 'score-box pending'; }
       } else if (box) {
@@ -478,9 +493,11 @@
       els.scoreModalError.hidden = false;
     } finally {
       els.scoreModalConfirmBtn.disabled = false;
+      els.scoreModalClearBtn.disabled = false;
     }
   }
 
+  els.scoreModalClearBtn.addEventListener('click', clearScoreModal);
   els.scoreModalCancelBtn.addEventListener('click', closeScoreModal);
   els.scoreModalConfirmBtn.addEventListener('click', confirmScoreModal);
   els.scoreModalOverlay.addEventListener('click', function (e) {
