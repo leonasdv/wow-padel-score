@@ -247,6 +247,8 @@ function fixedTeamsForFirstRound(fixedTeams: FixedTeam[], players: Player[]): Fi
 interface TeamHistory {
   appearances: Record<string, number>;
   opponentCount: Record<string, number>;
+  /** Consecutive rounds each team has played up to now (0 if it just rested) — lets live-seated formats rest the longest-running team first. */
+  playStreak?: Record<string, number>;
 }
 
 /** Reconstruct per-team appearance and opponent counts from existing rounds, so extending/reshuffling a Team Americano keeps the rotation fair. */
@@ -265,7 +267,19 @@ export function deriveTeamHistory(fixedTeams: FixedTeam[], rounds: Round[]): Tea
       if (ta && tb) opponentCount[pairKey(ta, tb)] = (opponentCount[pairKey(ta, tb)] ?? 0) + 1;
     }
   }
-  return { appearances, opponentCount };
+  const playStreak: Record<string, number> = {};
+  fixedTeams.forEach((t) => (playStreak[t.id] = 0));
+  for (const round of rounds) {
+    const played = new Set<string>();
+    for (const m of round.matches) {
+      const ta = teamOfPlayer[m.teamA[0]];
+      const tb = teamOfPlayer[m.teamB[0]];
+      if (ta) played.add(ta);
+      if (tb) played.add(tb);
+    }
+    fixedTeams.forEach((t) => (playStreak[t.id] = played.has(t.id) ? playStreak[t.id] + 1 : 0));
+  }
+  return { appearances, opponentCount, playStreak };
 }
 
 /** Greedily pairs teams for one round, preferring opponents they've faced least. */
@@ -626,10 +640,13 @@ export function generateTeamMexicanoRound(
   const matchesThisRound = Math.min(courts.length, Math.floor(eligible.length / 2));
   const teamsPerRound = matchesThisRound * 2;
 
-  // Seat the least-rested teams first; among ties, prioritize the currently stronger team to play
-  // (so the weaker of two equally-due teams is the one pushed into the rest slot).
+  // Seat the least-played teams first; among ties, the team on the shortest current playing streak
+  // plays first, so whoever has played the most rounds in a row rests next (no long streaks for the
+  // leaders), then the currently stronger team plays (so the weaker of two equally-due teams is the
+  // one pushed into the rest slot).
+  const streakOf = (id: string) => history.playStreak?.[id] ?? 0;
   const seatingOrder = shuffle(eligible).sort(
-    (a, b) => (appearances[a] ?? 0) - (appearances[b] ?? 0) || rateOf(b) - rateOf(a)
+    (a, b) => (appearances[a] ?? 0) - (appearances[b] ?? 0) || streakOf(a) - streakOf(b) || rateOf(b) - rateOf(a)
   );
   const playing = seatingOrder.slice(0, teamsPerRound);
   const resting = [...seatingOrder.slice(teamsPerRound), ...capped];
