@@ -942,22 +942,39 @@ export function replaceParticipant(event: WowEvent, playerId: string, newName: s
 }
 
 /**
- * Substitutes a participant for every round that hasn't been completed yet — outgoing and
- * incoming trade slots (their match, or sitting out) in the current round and every later one,
- * while completed rounds and their recorded scores stay exactly as played. Because it's a like-
- * for-like slot swap across the same remaining rounds, neither participant's total match count
- * for the event changes. Use when a scheduled player/team can't continue and someone already in
- * the roster takes over their remaining matches.
+ * Substitutes a participant in the round currently in progress — outgoing and incoming trade
+ * slots (their match, or sitting out) there, while completed rounds and their recorded scores stay
+ * exactly as played. Swapping every later slot too would only keep totals even if both had played
+ * the same number of matches so far; otherwise the incoming one inherits the outgoing one's whole
+ * remaining schedule and ends up a match or two off everyone else. So for formats whose rounds are
+ * pre-generated, the rounds after the current one are rebuilt from the real play counts, which
+ * rebalances them. Ranking formats build each round from live counts, so they self-balance.
  */
 export function substituteParticipant(event: WowEvent, outgoingId: string, incomingId: string): WowEvent {
-  const rounds = event.rounds.map((r) => {
-    if (r.completed) return r;
-    const swap = (pid: string) => (pid === outgoingId ? incomingId : pid === incomingId ? outgoingId : pid);
+  const swap = (pid: string) => (pid === outgoingId ? incomingId : pid === incomingId ? outgoingId : pid);
+  const swapped = event.rounds.map((r) => {
+    if (r.completed || r.index !== event.currentRoundIndex) return r;
     const matches = r.matches.map((m) => ({ ...m, teamA: m.teamA.map(swap), teamB: m.teamB.map(swap) }));
-    const sitOuts = r.sitOuts.map(swap);
-    return { ...r, matches, sitOuts };
+    return { ...r, matches, sitOuts: r.sitOuts.map(swap) };
   });
-  return { ...event, rounds };
+  const updated = { ...event, rounds: swapped };
+
+  if (event.format === 'knockout' || event.format === 'team_mexicano' || isRankingBased(event.format)) return updated;
+
+  const kept = swapped.filter((r) => r.completed || r.index <= event.currentRoundIndex);
+  const remaining = event.totalRoundsEstimate - kept.length;
+  if (remaining <= 0) return updated;
+
+  if (event.format === 'team_americano') {
+    const seed = deriveTeamHistory(event.fixedTeams!, kept);
+    const regenerated = generateTeamAmericanoSchedule(activeFixedTeams(event.fixedTeams!, event.players), event.courts, remaining, kept.length, seed, event.matchesPerPlayer);
+    const rounds = [...kept, ...regenerated];
+    return { ...updated, rounds, totalRoundsEstimate: rounds.length };
+  }
+  const seed = deriveRotationHistory(event.players, kept);
+  const regenerated = generateRotationSchedule(event.format, activePlayers(event.players), event.courts, remaining, kept.length, seed, event.matchesPerPlayer);
+  const rounds = [...kept, ...regenerated];
+  return { ...updated, rounds, totalRoundsEstimate: rounds.length };
 }
 
 export function setScore(event: WowEvent, roundIndex: number, courtId: string, team: 'A' | 'B', value: number): WowEvent {
