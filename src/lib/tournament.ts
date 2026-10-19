@@ -344,6 +344,8 @@ export function generateTeamAmericanoSchedule(
   const appearances: Record<string, number> = { ...(seed?.appearances ?? {}) };
   const opponentCount: Record<string, number> = { ...(seed?.opponentCount ?? {}) };
   teamIds.forEach((id) => (appearances[id] = appearances[id] ?? 0));
+  const playStreak: Record<string, number> = { ...(seed?.playStreak ?? {}) };
+  teamIds.forEach((id) => (playStreak[id] = playStreak[id] ?? 0));
 
   const rounds: Round[] = [];
   const roundLimit = matchesPerTeam != null ? MAX_TARGET_ROUNDS : totalRounds;
@@ -357,8 +359,11 @@ export function generateTeamAmericanoSchedule(
     if (matchesThisRound === 0) break;
     const teamsPerRound = matchesThisRound * 2;
 
-    // Seat the least-played teams first (shuffle breaks ties fairly).
-    const ordered = shuffle(eligible).sort((a, b) => (appearances[a] ?? 0) - (appearances[b] ?? 0));
+    // Seat the least-played teams first; among ties, the team on the shortest playing streak goes first so
+    // whoever just played rests next (no back-to-back matches when avoidable). Shuffle breaks remaining ties.
+    const ordered = shuffle(eligible).sort(
+      (a, b) => (appearances[a] ?? 0) - (appearances[b] ?? 0) || (playStreak[a] ?? 0) - (playStreak[b] ?? 0)
+    );
     const playing = ordered.slice(0, teamsPerRound);
     const resting = [...ordered.slice(teamsPerRound), ...capped];
     const pairs = pairTeamsMinRepeat(playing, opponentCount);
@@ -370,6 +375,8 @@ export function generateTeamAmericanoSchedule(
       scoreB: null,
     }));
     playing.forEach((id) => (appearances[id] = (appearances[id] ?? 0) + 1));
+    const playingSet = new Set(playing);
+    teamIds.forEach((id) => (playStreak[id] = playingSet.has(id) ? (playStreak[id] ?? 0) + 1 : 0));
     const sitOuts = resting.flatMap((id) => teamsById[id].playerIds);
     rounds.push({ index: startIndex + r, matches, sitOuts, completed: false });
   }
