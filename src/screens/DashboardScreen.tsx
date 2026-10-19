@@ -46,11 +46,9 @@ function playerName(players: { id: string; name: string }[], id: string): string
   return players.find((p) => p.id === id)?.name ?? '—';
 }
 
+/** Match views show names in full (the font is small enough to fit); kept as a function so call sites stay simple. */
 function shortName(fullName: string): string {
-  if (/[&+]/.test(fullName)) return fullName; // team entry (e.g. "Ron & Chelsea") — show in full
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length < 2) return fullName;
-  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  return fullName.trim();
 }
 
 interface PlayerRoundEntry {

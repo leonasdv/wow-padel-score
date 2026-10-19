@@ -30,10 +30,7 @@ const UNIT = CARD_H + GAP0;
 const COL_W = 190;
 
 function shortName(name: string): string {
-  if (/[&+]/.test(name)) return name; // team entry — show in full
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return name;
-  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  return name.trim();
 }
 
 export function KnockoutScreen() {
