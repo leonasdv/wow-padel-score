@@ -73,6 +73,7 @@
   }
 
   function shortName(fullName) {
+    if (/[&+]/.test(fullName || '')) return fullName; // team entry (e.g. "Ron & Chelsea") — show in full
     var parts = (fullName || '').trim().split(/\s+/);
     if (parts.length < 2) return fullName;
     return parts[0] + ' ' + parts[parts.length - 1][0] + '.';

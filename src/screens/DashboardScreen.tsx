@@ -47,6 +47,7 @@ function playerName(players: { id: string; name: string }[], id: string): string
 }
 
 function shortName(fullName: string): string {
+  if (/[&+]/.test(fullName)) return fullName; // team entry (e.g. "Ron & Chelsea") — show in full
   const parts = fullName.trim().split(/\s+/);
   if (parts.length < 2) return fullName;
   return `${parts[0]} ${parts[parts.length - 1][0]}.`;
@@ -667,7 +668,7 @@ export function DashboardScreen() {
                     </View>
                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9, minWidth: 0 }}>
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.player.gender === 'M' ? colors.male : colors.female }} />
-                      <Text style={styles.standName} numberOfLines={1}>
+                      <Text style={styles.standName}>
                         {s.player.name}
                       </Text>
                       {s.player.benched && (

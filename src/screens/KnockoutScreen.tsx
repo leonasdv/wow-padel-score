@@ -30,6 +30,7 @@ const UNIT = CARD_H + GAP0;
 const COL_W = 190;
 
 function shortName(name: string): string {
+  if (/[&+]/.test(name)) return name; // team entry — show in full
   const parts = name.trim().split(/\s+/);
   if (parts.length < 2) return name;
   return `${parts[0]} ${parts[parts.length - 1][0]}.`;
@@ -144,7 +145,7 @@ export function KnockoutScreen() {
       <View style={[styles.slot, isWinner && styles.slotWinner]}>
         {/* Tap the name to rename that competitor (only real, entered players). */}
         <Pressable style={styles.slotNameArea} onPress={() => id && openRename(id)} disabled={!id}>
-          <Text style={[styles.slotName, !id && styles.slotTbd, isWinner && styles.slotNameWinner]} numberOfLines={1}>
+          <Text style={[styles.slotName, !id && styles.slotTbd, isWinner && styles.slotNameWinner]}>
             {label}
           </Text>
           {!!id && <Ionicons name="pencil" size={10} color={isWinner ? colors.lime : colors.textFaint} style={styles.slotEditIcon} />}

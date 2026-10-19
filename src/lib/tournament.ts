@@ -47,19 +47,22 @@ export function isTeamFormat(format: Format): boolean {
  * Picks which players sit out this round, favoring those who have played the fewest matches so far.
  * When `cap` is set, anyone who has already reached it is forced to sit out — regardless of how much
  * spare court capacity is left — so nobody exceeds the target matches-per-player count.
+ * Among players on the same match count, those on the shortest current playing streak are seated first,
+ * so whoever just played rests before someone who just rested (avoids back-to-back matches).
  */
 function pickSitOuts(
   players: Player[],
   playCount: Record<string, number>,
   capacityPerRound: number,
   requireEvenGender: boolean,
-  cap?: number
+  cap?: number,
+  streak?: Record<string, number>
 ): { active: Player[]; sitOuts: Player[] } {
   const eligible = cap != null ? players.filter((p) => (playCount[p.id] ?? 0) < cap) : players;
   const capped = cap != null ? players.filter((p) => (playCount[p.id] ?? 0) >= cap) : [];
 
   if (requireEvenGender) {
-    const byLeastPlayed = (a: Player, b: Player) => (playCount[a.id] ?? 0) - (playCount[b.id] ?? 0);
+    const byLeastPlayed = (a: Player, b: Player) => (playCount[a.id] ?? 0) - (playCount[b.id] ?? 0) || (streak?.[a.id] ?? 0) - (streak?.[b.id] ?? 0);
     const males = shuffle(eligible.filter((p) => p.gender === 'M')).sort(byLeastPlayed);
     const females = shuffle(eligible.filter((p) => p.gender === 'F')).sort(byLeastPlayed);
     const maxPairsPerGender = Math.floor(capacityPerRound / 4) * 2;
@@ -70,7 +73,9 @@ function pickSitOuts(
     const sitOuts = [...males.slice(used), ...females.slice(used), ...capped];
     return { active, sitOuts };
   }
-  const sorted = shuffle(eligible).sort((a, b) => (playCount[a.id] ?? 0) - (playCount[b.id] ?? 0));
+  const sorted = shuffle(eligible).sort(
+    (a, b) => (playCount[a.id] ?? 0) - (playCount[b.id] ?? 0) || (streak?.[a.id] ?? 0) - (streak?.[b.id] ?? 0)
+  );
   const usable = Math.min(sorted.length, capacityPerRound) - (Math.min(sorted.length, capacityPerRound) % 4);
   return { active: sorted.slice(0, usable), sitOuts: [...sorted.slice(usable), ...capped] };
 }
@@ -138,6 +143,8 @@ interface RotationHistory {
   partnerCount: Record<string, number>;
   opponentCount: Record<string, number>;
   playCount: Record<string, number>;
+  /** Consecutive most-recent rounds each player has played (0 if they just rested). */
+  playStreak?: Record<string, number>;
 }
 
 /** Rebuilds partner/opponent/play-count history from a format's existing rounds, so extending a schedule keeps minimizing repeats instead of restarting from zero. */
@@ -162,7 +169,13 @@ export function deriveRotationHistory(players: Player[], rounds: Round[]): Rotat
       playCount[pid] = (playCount[pid] ?? 0) + 1;
     }
   }
-  return { partnerCount, opponentCount, playCount };
+  const playStreak: Record<string, number> = {};
+  players.forEach((p) => (playStreak[p.id] = 0));
+  for (const round of rounds) {
+    const played = new Set(round.matches.flatMap((m) => [...m.teamA, ...m.teamB]));
+    players.forEach((p) => (playStreak[p.id] = played.has(p.id) ? playStreak[p.id] + 1 : 0));
+  }
+  return { partnerCount, opponentCount, playCount, playStreak };
 }
 
 /** Hard ceiling on generated rounds when chasing a matches-per-player target, so a stuck/impossible target can't loop forever. */
@@ -192,13 +205,15 @@ export function generateRotationSchedule(
   const opponentCount: Record<string, number> = { ...(seed?.opponentCount ?? {}) };
   const playCount: Record<string, number> = { ...(seed?.playCount ?? {}) };
   players.forEach((p) => (playCount[p.id] = playCount[p.id] ?? 0));
+  const playStreak: Record<string, number> = { ...(seed?.playStreak ?? {}) };
+  players.forEach((p) => (playStreak[p.id] = playStreak[p.id] ?? 0));
   const capacity = courts.length * 4;
   const rounds: Round[] = [];
 
   const roundLimit = matchesPerPlayer != null ? MAX_TARGET_ROUNDS : totalRounds;
   for (let r = 1; r <= roundLimit; r++) {
     if (matchesPerPlayer != null && players.every((p) => (playCount[p.id] ?? 0) >= matchesPerPlayer)) break;
-    const { active, sitOuts } = pickSitOuts(players, playCount, capacity, format === 'mix_americano', matchesPerPlayer);
+    const { active, sitOuts } = pickSitOuts(players, playCount, capacity, format === 'mix_americano', matchesPerPlayer, playStreak);
     if (active.length < 4) break; // not enough players left needing a match to fill one — target unreachable for the rest
     const quartets = buildQuartets(active.map((p) => p.id), partnerCount, opponentCount, genderOf);
     const matches: Match[] = quartets.map((q, i) => ({
@@ -209,6 +224,8 @@ export function generateRotationSchedule(
       scoreB: null,
     }));
     active.forEach((p) => (playCount[p.id] += 1));
+    const activeIds = new Set(active.map((p) => p.id));
+    players.forEach((p) => (playStreak[p.id] = activeIds.has(p.id) ? playStreak[p.id] + 1 : 0));
     rounds.push({ index: startIndex + r, matches, sitOuts: sitOuts.map((p) => p.id), completed: false });
   }
   return rounds;
@@ -531,6 +548,7 @@ function generateRankingRound(
   const byId = Object.fromEntries(standings.map((s) => [s.player.id, s]));
   const playCount: Record<string, number> = Object.fromEntries(players.map((p) => [p.id, byId[p.id]?.played ?? 0]));
   const capacity = courts.length * 4;
+  const playStreak = deriveRotationHistory(players, rounds).playStreak ?? {};
   const pointsOf = (p: Player) => byId[p.id]?.points ?? 0;
   // Points per match played so far — used (mexicano only) instead of raw points so a recent bye
   // doesn't bury a player who simply hasn't rotated back onto court as often yet.
@@ -540,7 +558,7 @@ function generateRankingRound(
   };
 
   if (format === 'mixicano') {
-    const { active, sitOuts } = pickSitOuts(players, playCount, capacity, true, matchesPerPlayer);
+    const { active, sitOuts } = pickSitOuts(players, playCount, capacity, true, matchesPerPlayer, playStreak);
     const males = active.filter((p) => p.gender === 'M').sort((a, b) => pointsOf(b) - pointsOf(a));
     const females = active.filter((p) => p.gender === 'F').sort((a, b) => pointsOf(b) - pointsOf(a));
     const n = Math.min(males.length, females.length);
@@ -573,7 +591,9 @@ function generateRankingRound(
   const eligible = matchesPerPlayer != null ? players.filter((p) => (playCount[p.id] ?? 0) < matchesPerPlayer) : players;
   const capped = matchesPerPlayer != null ? players.filter((p) => (playCount[p.id] ?? 0) >= matchesPerPlayer) : [];
   const seatingOrder = shuffle(eligible).sort(
-    (a, b) => (playCount[a.id] ?? 0) - (playCount[b.id] ?? 0) || rateOf(b) - rateOf(a)
+    (a, b) => (playCount[a.id] ?? 0) - (playCount[b.id] ?? 0) ||
+      (playStreak[a.id] ?? 0) - (playStreak[b.id] ?? 0) ||
+      rateOf(b) - rateOf(a)
   );
   const usable = Math.min(seatingOrder.length, capacity) - (Math.min(seatingOrder.length, capacity) % 4);
   const active = seatingOrder.slice(0, usable);
