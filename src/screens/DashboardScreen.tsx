@@ -408,7 +408,7 @@ export function DashboardScreen() {
                                     Round {entry.round.index}
                                     {court ? ` · ${court.name}` : ''}
                                   </Text>
-                                  <Text style={styles.historyMatchup} numberOfLines={1}>
+                                  <Text style={styles.historyMatchup}>
                                     {teammates.length > 0 ? `w/ ${teammates.map((id) => shortName(playerName(event.players, id))).join(' & ')} ` : ''}
                                     vs {opp.map((id) => shortName(playerName(event.players, id))).join(' & ')}
                                   </Text>
@@ -488,7 +488,7 @@ export function DashboardScreen() {
                             <View style={{ flex: 1, minWidth: 0 }}>
                               {m.teamA.map((pid) => (
                                 <Pressable key={pid} style={styles.playerTag} onPress={() => openSwap(pid, round.index)} hitSlop={6}>
-                                  <Text style={styles.playerLine} numberOfLines={1}>
+                                  <Text style={styles.playerLine}>
                                     {shortName(playerName(event.players, pid))}
                                   </Text>
                                   <Ionicons name="pencil" size={9} color={colors.textFaint} style={styles.playerEditIcon} />
@@ -520,7 +520,7 @@ export function DashboardScreen() {
                               {m.teamB.map((pid) => (
                                 <Pressable key={pid} style={[styles.playerTag, { justifyContent: 'flex-end' }]} onPress={() => openSwap(pid, round.index)} hitSlop={6}>
                                   <Ionicons name="pencil" size={9} color={colors.textFaint} style={styles.playerEditIcon} />
-                                  <Text style={[styles.playerLine, { textAlign: 'right' }]} numberOfLines={1}>
+                                  <Text style={[styles.playerLine, { textAlign: 'right' }]}>
                                     {shortName(playerName(event.players, pid))}
                                   </Text>
                                 </Pressable>
@@ -795,7 +795,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   statusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
   matchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   playerTag: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  playerLine: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, flexShrink: 1 },
+  playerLine: { fontSize: 12, fontWeight: '700', color: colors.textPrimary, flexShrink: 1 },
   playerEditIcon: { opacity: 0.6 },
   scoreBox: { width: 58, height: 58, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   scoreBoxShared: { borderStyle: 'dashed' },
