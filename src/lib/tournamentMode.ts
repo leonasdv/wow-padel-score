@@ -8,8 +8,23 @@ import type { Match, Player, Round, TournamentGroup, WowEvent } from '../types';
 export const GROUP_WIN_POINTS = 3;
 export const GROUP_DRAW_POINTS = 1;
 
+/** What separated two players level on league points, in tie-break order. */
+export type GroupTieCriterion = 'headToHead' | 'scoreDiff' | 'scoreFor' | 'tied';
+
+/** Why one player is ranked above/below another that has the same points — from this player's point of view. */
+export interface GroupTieReason {
+  criterion: GroupTieCriterion;
+  ownValue: number;
+  otherValue: number;
+  aheadOfOther: boolean;
+  /** Size of the tied set the criterion was applied to (head-to-head only: 2 = a direct match, more = a mini-league). */
+  tiedCount: number;
+}
+
 export interface GroupStanding {
   player: Player;
+  /** Keyed by the other player's id — only filled for players level on points with this one. */
+  tieReasons: Record<string, GroupTieReason>;
   rank: number; // 1-based within the group
   played: number;
   wins: number;
@@ -148,7 +163,7 @@ export function computeGroupTable(group: TournamentGroup, players: Player[], rou
   const rows = new Map<string, GroupStanding>();
   group.playerIds.forEach((id) => {
     const player = byId.get(id);
-    if (player) rows.set(id, { player, rank: 0, played: 0, wins: 0, draws: 0, losses: 0, scoreFor: 0, scoreAgainst: 0, diff: 0, points: 0 });
+    if (player) rows.set(id, { player, tieReasons: {}, rank: 0, played: 0, wins: 0, draws: 0, losses: 0, scoreFor: 0, scoreAgainst: 0, diff: 0, points: 0 });
   });
 
   const matches: Match[] = [];
@@ -190,6 +205,12 @@ export function computeGroupTable(group: TournamentGroup, players: Player[], rou
   const fallback = (x: GroupStanding, y: GroupStanding) =>
     y.diff - x.diff || y.scoreFor - x.scoreFor || x.player.name.localeCompare(y.player.name);
 
+  // `ahead` finished above `behind`; remember why, for the "!" explanation in the table.
+  const recordTie = (ahead: GroupStanding, behind: GroupStanding, criterion: GroupTieCriterion, aheadValue: number, behindValue: number, tiedCount: number) => {
+    ahead.tieReasons[behind.player.id] = { criterion, ownValue: aheadValue, otherValue: behindValue, aheadOfOther: true, tiedCount };
+    behind.tieReasons[ahead.player.id] = { criterion, ownValue: behindValue, otherValue: aheadValue, aheadOfOther: false, tiedCount };
+  };
+
   // Head-to-head mini-league among `tied`, recursing on any sub-tie it leaves unresolved.
   const breakTie = (tied: GroupStanding[]): GroupStanding[] => {
     const tiedIds = new Set(tied.map((r) => r.player.id));
@@ -209,6 +230,11 @@ export function computeGroupTable(group: TournamentGroup, players: Player[], rou
     }
     const miniOf = (r: GroupStanding) => mini.get(r.player.id) as number;
     const sorted = [...tied].sort((x, y) => miniOf(y) - miniOf(x));
+    for (let a = 0; a < sorted.length; a++) {
+      for (let b = a + 1; b < sorted.length; b++) {
+        if (miniOf(sorted[a]) !== miniOf(sorted[b])) recordTie(sorted[a], sorted[b], 'headToHead', miniOf(sorted[a]), miniOf(sorted[b]), tied.length);
+      }
+    }
     const out: GroupStanding[] = [];
     let i = 0;
     while (i < sorted.length) {
@@ -217,7 +243,20 @@ export function computeGroupTable(group: TournamentGroup, players: Player[], rou
       const sub = sorted.slice(i, j);
       if (sub.length === 1) out.push(sub[0]);
       else if (sub.length < tied.length) out.push(...breakTie(sub)); // h2h separated others — re-run among the remainder
-      else out.push(...sub.sort(fallback)); // h2h can't separate them at all
+      else {
+        // h2h can't separate them at all — score difference, then points scored, then name.
+        sub.sort(fallback);
+        for (let a = 0; a < sub.length; a++) {
+          for (let b = a + 1; b < sub.length; b++) {
+            const x = sub[a];
+            const y = sub[b];
+            if (x.diff !== y.diff) recordTie(x, y, 'scoreDiff', x.diff, y.diff, sub.length);
+            else if (x.scoreFor !== y.scoreFor) recordTie(x, y, 'scoreFor', x.scoreFor, y.scoreFor, sub.length);
+            else recordTie(x, y, 'tied', 0, 0, sub.length);
+          }
+        }
+        out.push(...sub);
+      }
       i = j;
     }
     return out;
@@ -235,6 +274,24 @@ export function computeGroupTable(group: TournamentGroup, players: Player[], rou
   }
   ranked.forEach((r, idx) => (r.rank = idx + 1));
   return ranked;
+}
+
+/** Plain-language explanation of a group tie-break, shown behind the "!" next to a player in the group table. */
+export function groupTieSentence(playerName: string, neighborName: string, r: GroupTieReason): string {
+  const placed = `${playerName} is ranked ${r.aheadOfOther ? 'above' : 'below'} ${neighborName} — same points`;
+  const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+  switch (r.criterion) {
+    case 'headToHead':
+      return r.tiedCount === 2
+        ? `${placed}, but ${r.aheadOfOther ? 'won' : 'lost'} the head-to-head match between them.`
+        : `${placed}, but ${r.aheadOfOther ? 'better' : 'worse'} head-to-head record among the ${r.tiedCount} players tied on points (${r.ownValue} vs ${r.otherValue} pts in the matches between them).`;
+    case 'scoreDiff':
+      return `${placed} and head-to-head can't separate them, so score difference decides: ${signed(r.ownValue)} vs ${signed(r.otherValue)}.`;
+    case 'scoreFor':
+      return `${placed}, head-to-head and score difference are level, so points scored decide: ${r.ownValue} vs ${r.otherValue}.`;
+    default:
+      return `${playerName} and ${neighborName} are level on points, head-to-head, score difference and points scored. The order shown is alphabetical.`;
+  }
 }
 
 /** Every group's ranked table for an event in (or past) the group stage. */

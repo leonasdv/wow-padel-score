@@ -474,6 +474,19 @@
       els.standingsPane.innerHTML = renderGroupTables(event);
       return;
     }
+    if (event.format === 'knockout') {
+      // A knockout ranking scores how far each player has advanced (byes already count as a round), so
+      // before any match has a result it would show meaningless points — hold it back until one does.
+      var anyScored = event.rounds.some(function (r) {
+        return r.matches.some(function (m) { return m.scoreA != null && m.scoreB != null; });
+      }) || (event.thirdPlaceMatch && event.thirdPlaceMatch.scoreA != null && event.thirdPlaceMatch.scoreB != null);
+      if (!anyScored) {
+        els.standingsPane.innerHTML = event.tournament
+          ? '<h3 class="section-label">Group stage</h3>' + renderGroupTables(event)
+          : '<p class="empty-note">Standings appear once the first match has been played.</p>';
+        return;
+      }
+    }
     var standings = event.standings || [];
     var html =
       '<div class="table-header">' +

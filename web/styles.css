@@ -212,3 +212,5 @@ main { padding: 12px 20px 0; }
 .group-block { min-width: 0; }
 .group-title { margin: 4px 0 8px; font-size: 12px; font-weight: 900; letter-spacing: 1.2px; text-transform: uppercase; color: var(--lime); }
 .rule-note { grid-column: 1 / -1; margin: 2px 2px 0; font-size: 11.5px; line-height: 1.5; color: var(--text-faint); }
+
+.empty-note { margin: 8px 2px; font-size: 13px; color: var(--text-faint); }

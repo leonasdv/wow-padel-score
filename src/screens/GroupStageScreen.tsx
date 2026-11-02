@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
 import { IconButton, LivePulseDot, ScreenBackground } from '../components/Misc';
 import { QrCodeModal } from '../components/QrCodeModal';
+import { TiebreakInfoModal, type TiebreakEntry } from '../components/TiebreakInfoModal';
 import { ScoreKeypad } from '../components/ScoreKeypad';
 import { useEvents } from '../data/store';
 import { Alert } from '../lib/alert';
@@ -17,6 +18,7 @@ import {
   groupIndexOfMatch,
   groupStageProgress,
   groupStageRounds,
+  groupTieSentence,
   isGroupStageComplete,
   setGroupScore,
   startTournamentKnockout,
@@ -44,6 +46,7 @@ export function GroupStageScreen() {
   const [shareBusy, setShareBusy] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [tiebreakInfo, setTiebreakInfo] = useState<{ playerName: string; points: number; entries: TiebreakEntry[] } | null>(null);
 
   if (!event || !event.tournament) {
     return (
@@ -215,8 +218,13 @@ export function GroupStageScreen() {
                   <Text style={[styles.th, styles.numWide]}>+/-</Text>
                   <Text style={[styles.th, styles.numWide, { textAlign: 'right' }]}>Pts</Text>
                 </View>
-                {current.table.map((row) => {
+                {current.table.map((row, ri) => {
                   const advancing = row.rank <= cfg.advanceCount;
+                  // Explain the order against whoever sits directly above/below on the same points.
+                  const tiebreakEntries: TiebreakEntry[] = [current.table[ri - 1], current.table[ri + 1]].flatMap((nb) => {
+                    const reason = nb ? row.tieReasons[nb.player.id] : undefined;
+                    return nb && reason ? [{ neighborName: nb.player.name, text: groupTieSentence(row.player.name, nb.player.name, reason) }] : [];
+                  });
                   const lastAdvancing = row.rank === cfg.advanceCount && row.rank < current.table.length;
                   return (
                     <View key={row.player.id}>
@@ -224,7 +232,17 @@ export function GroupStageScreen() {
                         <View style={[styles.rankBadge, advancing && styles.rankBadgeAdv]}>
                           <Text style={[styles.rankText, advancing && { color: colors.courtNavy }]}>{row.rank}</Text>
                         </View>
-                        <Text style={styles.tName}>{row.player.name}</Text>
+                        <View style={styles.tNameWrap}>
+                          <Text style={styles.tName}>{row.player.name}</Text>
+                          {tiebreakEntries.length > 0 && (
+                            <Pressable
+                              hitSlop={8}
+                              onPress={() => setTiebreakInfo({ playerName: row.player.name, points: row.points, entries: tiebreakEntries })}
+                            >
+                              <Ionicons name="alert-circle" size={14} color={colors.amber} />
+                            </Pressable>
+                          )}
+                        </View>
                         <Text style={[styles.tCell, styles.num]}>{row.played}</Text>
                         <Text style={[styles.tCell, styles.num, { fontWeight: '800' }]}>{row.wins}</Text>
                         <Text style={[styles.tCell, styles.num]}>{row.draws}</Text>
@@ -312,6 +330,14 @@ export function GroupStageScreen() {
         />
 
         <QrCodeModal visible={!!qrUrl} url={qrUrl ?? ''} onClose={() => setQrUrl(null)} />
+
+        <TiebreakInfoModal
+          visible={!!tiebreakInfo}
+          playerName={tiebreakInfo?.playerName ?? ''}
+          points={tiebreakInfo?.points ?? 0}
+          entries={tiebreakInfo?.entries ?? []}
+          onClose={() => setTiebreakInfo(null)}
+        />
       </SafeAreaView>
     </ScreenBackground>
   );
@@ -347,7 +373,8 @@ const makeStyles = (colors: ColorPalette) =>
     rankBadge: { width: 24, height: 24, borderRadius: 8, backgroundColor: colors.white06, alignItems: 'center', justifyContent: 'center', marginRight: 0 },
     rankBadgeAdv: { backgroundColor: colors.lime },
     rankText: { fontSize: 12, fontWeight: '800', color: colors.textMuted },
-    tName: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+    tNameWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+    tName: { flexShrink: 1, fontSize: 14, fontWeight: '700', color: colors.textPrimary },
     tCell: { fontSize: 13, color: colors.textPrimary, fontVariant: ['tabular-nums'] },
     tPts: { fontSize: 15, fontWeight: '900', color: colors.textPrimary, textAlign: 'right', fontVariant: ['tabular-nums'] },
     cutLine: { alignItems: 'center', paddingVertical: 4, borderBottomWidth: 1, borderStyle: 'dashed', borderBottomColor: colors.limeTintBorder, marginBottom: 4 },

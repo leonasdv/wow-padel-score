@@ -7,7 +7,10 @@ import { useTheme } from '../theme/ThemeContext';
 
 export interface TiebreakEntry {
   neighborName: string;
-  reason: TiebreakReason;
+  /** Standard (non-group) standings: structured reason, turned into a sentence here. */
+  reason?: TiebreakReason;
+  /** Ready-made sentence (Tournament Mode groups use their own tie-break chain). Takes precedence over `reason`. */
+  text?: string;
 }
 
 interface Props {
@@ -33,6 +36,8 @@ function formatValue(criterion: TiebreakReason['criterion'], value: number): str
 
 function sentenceFor(playerName: string, entry: TiebreakEntry): string {
   const { reason, neighborName } = entry;
+  if (entry.text) return entry.text;
+  if (!reason) return '';
   if (reason.criterion === 'tied') {
     return `${playerName} and ${neighborName} are fully tied on every stat (points, league score, wins, ties, losses, and head-to-head). The order shown just reflects entry order.`;
   }
