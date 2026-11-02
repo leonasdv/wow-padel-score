@@ -867,7 +867,7 @@ export function matchesPerPlayerIsFeasible(format: Format, players: Player[], ma
 
 /** Estimates total rounds a matches-per-player target will produce, for preview before generating. */
 export function estimateRoundsForMatchesPerPlayer(format: Format, players: Player[], courts: Court[], matchesPerPlayer: number): number {
-  if (format === 'knockout') return 0;
+  if (format === 'knockout' || format === 'tournament') return 0;
   if (isTeamFormat(format)) {
     // Round count only depends on capacity + fair appearance seating, not on how courts are paired —
     // Team Americano's scheduler gives the same count Team Mexicano's live, standings-driven rounds will need.
@@ -1073,7 +1073,7 @@ export function toggleBench(event: WowEvent, playerId: string): WowEvent {
   const players = event.players.map((p) => (p.id === playerId ? { ...p, benched: !p.benched } : p));
   const updated = { ...event, players };
 
-  if (event.format === 'knockout') return updated; // bracket is fixed at creation — nothing to regenerate
+  if (event.format === 'knockout' || event.format === 'tournament') return updated; // bracket/groups are fixed at creation — nothing to regenerate
 
   const kept = event.rounds.filter((r) => r.completed || r.index <= event.currentRoundIndex);
   const remaining = event.totalRoundsEstimate - kept.length;
@@ -1123,7 +1123,7 @@ export function substituteParticipant(event: WowEvent, outgoingId: string, incom
   });
   const updated = { ...event, rounds: swapped };
 
-  if (event.format === 'knockout' || event.format === 'team_mexicano' || isRankingBased(event.format)) return updated;
+  if (event.format === 'knockout' || event.format === 'tournament' || event.format === 'team_mexicano' || isRankingBased(event.format)) return updated;
 
   const kept = swapped.filter((r) => r.completed || r.index <= event.currentRoundIndex);
   const remaining = event.totalRoundsEstimate - kept.length;
@@ -1318,7 +1318,6 @@ export function startKnockout(event: WowEvent): WowEvent {
   const byes = size - players.length;
   const realMatches = matchCount - byes; // matches with two real competitors
 
-  const rounds: Round[] = [];
   const firstMatches: Match[] = [];
   let k = 0;
   for (let i = 0; i < matchCount; i++) {
@@ -1331,7 +1330,16 @@ export function startKnockout(event: WowEvent): WowEvent {
       firstMatches.push({ courtId: `r0m${i}`, teamA: a ? [a] : [], teamB: [], scoreA: null, scoreB: null });
     }
   }
-  rounds.push({ index: 1, matches: firstMatches, sitOuts: [], completed: false });
+  return buildKnockout(event, firstMatches, size, players.length);
+}
+
+/**
+ * Turns an already-seated first round into the full bracket: appends the empty later rounds (and a 3rd-place
+ * playoff when two real semifinal losers exist), then lets recomputeKnockout resolve byes. Shared by the plain
+ * Knockout format (input-order seating) and Tournament Mode (seeded by group results).
+ */
+export function buildKnockout(event: WowEvent, firstMatches: Match[], size: number, entrantCount: number): WowEvent {
+  const rounds: Round[] = [{ index: 1, matches: firstMatches, sitOuts: [], completed: false }];
 
   let count = size / 2;
   let idx = 1;
@@ -1347,7 +1355,7 @@ export function startKnockout(event: WowEvent): WowEvent {
 
   // A 3rd-place playoff needs two real semifinal losers. That holds for size ≥ 8 (byes only reach
   // round 1), or for a 4-slot bracket only when it's exactly 4 players (no byes in the semis).
-  const hasThirdPlace = rounds.length >= 2 && (size >= 8 || players.length === 4);
+  const hasThirdPlace = rounds.length >= 2 && (size >= 8 || entrantCount === 4);
   const thirdPlaceMatch: Match | undefined = hasThirdPlace
     ? { courtId: 'third', teamA: [], teamB: [], scoreA: null, scoreB: null }
     : undefined;

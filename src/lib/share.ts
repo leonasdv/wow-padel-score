@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import { applyScore, clearScore, computeStandings, sortStandings } from './tournament';
+import { computeAllGroupTables } from './tournamentMode';
 import { supabase } from './supabase';
 import type { WowEvent } from '../types';
 
@@ -18,9 +19,36 @@ function shortCode(length: number): string {
   return out;
 }
 
+/** Tournament Mode extras for the web viewer: ready-made ranked group tables (the viewer never re-derives tie-breaks) plus which stage we're in. */
+function buildTournamentPayload(event: WowEvent) {
+  const cfg = event.tournament;
+  if (!cfg) return undefined;
+  return {
+    stage: event.format === 'tournament' ? 'groups' : 'knockout',
+    advanceCount: cfg.advanceCount,
+    groups: computeAllGroupTables(event).map(({ group, table }) => ({
+      id: group.id,
+      name: group.name,
+      table: table.map((r) => ({
+        id: r.player.id,
+        name: r.player.name,
+        rank: r.rank,
+        played: r.played,
+        wins: r.wins,
+        draws: r.draws,
+        losses: r.losses,
+        diff: r.diff,
+        points: r.points,
+        advancing: r.rank <= cfg.advanceCount,
+      })),
+    })),
+  };
+}
+
 function buildPayload(event: WowEvent) {
   const standings = sortStandings(computeStandings(event), 'points', event.rounds);
   return {
+    tournament: buildTournamentPayload(event),
     name: event.name,
     format: event.format,
     scoringMode: event.scoringMode,

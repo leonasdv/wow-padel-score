@@ -7,7 +7,8 @@ export type Format =
   | 'mix_americano'
   | 'team_americano'
   | 'team_mexicano'
-  | 'knockout';
+  | 'knockout'
+  | 'tournament';
 
 export type ScoringMode = 'total' | 'free';
 
@@ -48,6 +49,28 @@ export interface FixedTeam {
   playerIds: string[];
 }
 
+/** One round-robin group in Tournament Mode. */
+export interface TournamentGroup {
+  id: string;
+  name: string; // "Group A"
+  playerIds: string[];
+}
+
+/**
+ * Tournament Mode = round-robin group stage, then a single-elimination knockout of the top finishers.
+ * While the group stage runs the event's `format` is 'tournament' and its matches live in `rounds`
+ * (one round per matchday, `courtId` is a per-group-unique fixture key). When the organizer starts the
+ * knockout stage the event's `format` flips to 'knockout' (so the bracket screen, results card and web
+ * viewer all work unchanged), `rounds` becomes the bracket, and the group matches are archived in `groupRounds`.
+ */
+export interface TournamentConfig {
+  groups: TournamentGroup[];
+  /** How many players from each group advance to the knockout (top 1, top 2, ...). */
+  advanceCount: number;
+  /** Group-stage matches, archived once the knockout stage has started. */
+  groupRounds?: Round[];
+}
+
 export interface WowEvent {
   id: string;
   name: string;
@@ -58,6 +81,7 @@ export interface WowEvent {
   players: Player[];
   fixedTeams?: FixedTeam[]; // team_americano / team_mexicano only
   thirdPlaceMatch?: Match; // knockout only — semifinal losers play for 3rd
+  tournament?: TournamentConfig; // Tournament Mode only — groups + advancement; see TournamentConfig
   rounds: Round[];
   totalRoundsEstimate: number;
   matchesPerPlayer?: number; // optional target set at creation — every player/team gets exactly this many matches
@@ -118,4 +142,14 @@ export const FORMAT_META: Record<Format, { name: string; abbr: string; desc: str
     abbr: 'KO',
     desc: 'Single-elimination bracket — win or go home.',
   },
+  tournament: {
+    name: 'Tournament Mode',
+    abbr: 'TN',
+    desc: 'Group stage (round-robin, 3 pts per win) then a knockout for the top finishers.',
+  },
 };
+
+/** Display name for an event's format — a knockout that grew out of a group stage still reads "Tournament Mode". */
+export function eventFormatName(event: Pick<WowEvent, 'format' | 'tournament'>): string {
+  return event.tournament ? FORMAT_META.tournament.name : FORMAT_META[event.format].name;
+}

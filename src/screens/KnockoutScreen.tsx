@@ -252,7 +252,15 @@ export function KnockoutScreen() {
           <Text style={styles.title} numberOfLines={1}>
             {event.name}
           </Text>
-          <Text style={styles.meta}>Knockout · {event.players.length} players</Text>
+          <Text style={styles.meta}>
+            {event.tournament ? 'Tournament Mode · Knockout stage' : 'Knockout'} · {event.players.length} players
+          </Text>
+          {event.tournament && (
+            <Pressable style={styles.groupsLink} onPress={() => nav.navigate('GroupStage', { eventId: event.id })}>
+              <Ionicons name="grid-outline" size={14} color={colors.lime} />
+              <Text style={styles.groupsLinkText}>View group stage results</Text>
+            </Pressable>
+          )}
         </View>
 
         {champion && (
@@ -397,6 +405,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   pillText: { fontSize: 12, fontWeight: '800', color: colors.lime, letterSpacing: 0.5 },
   title: { marginTop: 14, fontSize: 23, fontWeight: '900', letterSpacing: -0.6, color: colors.textPrimary },
   meta: { fontSize: 13, color: colors.textMuted, fontWeight: '600', marginTop: 3 },
+  groupsLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 99, backgroundColor: colors.limeTint, borderWidth: 1, borderColor: colors.limeTintBorder },
+  groupsLinkText: { fontSize: 12, fontWeight: '800', color: colors.lime },
   champBanner: { flexDirection: 'row', alignItems: 'center', gap: 9, marginHorizontal: 22, marginTop: 14, padding: 12, borderRadius: 14, backgroundColor: 'rgba(255,211,78,.12)', borderWidth: 1, borderColor: 'rgba(255,211,78,.3)' },
   champText: { fontSize: 14, fontWeight: '800', color: colors.textPrimary },
   vscroll: { flex: 1 },

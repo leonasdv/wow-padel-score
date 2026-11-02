@@ -16,7 +16,8 @@ import type { RootStackParamList } from '../navigation/types';
 import type { ColorPalette } from '../theme/tokens';
 import { radius } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
-import { FORMAT_META, type WowEvent } from '../types';
+import { eventFormatName, type WowEvent } from '../types';
+import { startTournament } from '../lib/tournamentMode';
 
 function formatDate(ts: number): string {
   const d = new Date(ts);
@@ -33,6 +34,10 @@ export function HomeScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const onOpenEvent = (ev: WowEvent) => {
+    if (ev.format === 'tournament') {
+      nav.navigate('GroupStage', { eventId: ev.id });
+      return;
+    }
     if (ev.format === 'knockout') {
       nav.navigate('Knockout', { eventId: ev.id });
       return;
@@ -47,12 +52,29 @@ export function HomeScreen() {
   };
 
   const onDuplicate = async (ev: WowEvent) => {
+    const newPlayers = ev.players.map((p) => ({ ...p, id: makeId('player') }));
+    const newIdOf = new Map(ev.players.map((p, i) => [p.id, newPlayers[i].id]));
+    // A Tournament Mode copy restarts from the group stage (even if the original already moved on to its
+    // knockout) with the same groups, re-pointed at the copied players.
+    const tournamentCopy = ev.tournament
+      ? {
+          advanceCount: ev.tournament.advanceCount,
+          groups: ev.tournament.groups.map((g) => ({
+            id: makeId('group'),
+            name: g.name,
+            playerIds: g.playerIds.map((id) => newIdOf.get(id)).filter((id): id is string => !!id),
+          })),
+        }
+      : undefined;
     const draftCopy: WowEvent = {
       ...ev,
       id: makeId('event'),
       name: `${ev.name} (Copy)`,
+      format: tournamentCopy ? 'tournament' : ev.format,
+      tournament: tournamentCopy,
+      thirdPlaceMatch: undefined,
       courts: ev.courts.map((c) => ({ ...c, id: makeId('court') })),
-      players: ev.players.map((p) => ({ ...p, id: makeId('player') })),
+      players: newPlayers,
       fixedTeams: undefined,
       rounds: [],
       totalRoundsEstimate: 0,
@@ -63,9 +85,10 @@ export function HomeScreen() {
       shareId: undefined,
       editToken: undefined,
     };
-    const live = startEvent(draftCopy, ev.totalRoundsEstimate);
+    const live = draftCopy.format === 'tournament' ? startTournament(draftCopy) : startEvent(draftCopy, ev.totalRoundsEstimate);
     await addEvent(live);
-    if (live.format === 'knockout') nav.navigate('Knockout', { eventId: live.id });
+    if (live.format === 'tournament') nav.navigate('GroupStage', { eventId: live.id });
+    else if (live.format === 'knockout') nav.navigate('Knockout', { eventId: live.id });
     else nav.navigate('Dashboard', { eventId: live.id });
   };
 
@@ -172,12 +195,12 @@ export function HomeScreen() {
             </View>
             <View style={styles.tagRow}>
               <View style={styles.tag}>
-                <Text style={styles.tagText}>{FORMAT_META[item.format].name}</Text>
+                <Text style={styles.tagText}>{eventFormatName(item)}</Text>
               </View>
               <View style={styles.tag}>
                 <Text style={styles.tagText}>{item.players.length} players</Text>
               </View>
-              {item.format !== 'knockout' && (
+              {item.format !== 'knockout' && item.format !== 'tournament' && (
                 <View style={styles.tag}>
                   <Text style={styles.tagText}>{item.courts.length} courts</Text>
                 </View>

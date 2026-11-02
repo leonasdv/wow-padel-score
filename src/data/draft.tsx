@@ -11,6 +11,10 @@ export interface DraftEvent {
   players: Player[];
   numRounds: number;
   matchesPerPlayer?: number;
+  /** Tournament Mode: how many groups, which group (0-based index) each player id is in, and how many per group advance. */
+  groupCount: number;
+  groupOf: Record<string, number>;
+  advanceCount: number;
 }
 
 function emptyDraft(): DraftEvent {
@@ -22,6 +26,9 @@ function emptyDraft(): DraftEvent {
     courts: [{ id: makeId('court'), name: 'Court 1' }],
     players: [],
     numRounds: 9,
+    groupCount: 2,
+    groupOf: {},
+    advanceCount: 2,
   };
 }
 

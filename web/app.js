@@ -12,6 +12,7 @@
     team_americano: 'Team Americano',
     team_mexicano: 'Team Mexicano',
     knockout: 'Knockout',
+    tournament: 'Tournament Mode',
   };
 
   // Kept in sync with isTeamFormat() in src/lib/tournament.ts.
@@ -144,8 +145,18 @@
     currentEvent = event;
     lastRender = { event: event, updatedAt: updatedAt, inputSource: inputSource };
     els.eventName.textContent = event.name;
-    els.eventMeta.textContent =
-      (FORMAT_NAMES[event.format] || event.format) + ' · ' + event.players.length + ' players · ' + event.courts.length + ' courts';
+    if (event.tournament) {
+      els.eventMeta.textContent =
+        'Tournament Mode · ' + (event.tournament.stage === 'groups' ? 'Group stage' : 'Knockout stage') +
+        ' · ' + event.players.length + ' players · ' + event.tournament.groups.length + ' groups · top ' + event.tournament.advanceCount + ' advance';
+      els.tabRoundsBtn.textContent = event.tournament.stage === 'groups' ? 'Matches' : 'Bracket';
+      els.tabStandingsBtn.textContent = event.tournament.stage === 'groups' ? 'Groups' : 'Standings';
+    } else {
+      els.eventMeta.textContent =
+        (FORMAT_NAMES[event.format] || event.format) + ' · ' + event.players.length + ' players · ' + event.courts.length + ' courts';
+      els.tabRoundsBtn.textContent = 'Rounds';
+      els.tabStandingsBtn.textContent = 'Standings';
+    }
 
     var isLive = event.status === 'live';
     els.statusPill.textContent = isLive ? 'LIVE' : 'ENDED';
@@ -154,7 +165,7 @@
     // Score entry from this link covers every round (live, past corrections, upcoming), including
     // after the event has ended, and only while the organizer has this event toggled to web
     // input — never for knockout (out of scope for now).
-    var canEditHere = !!editorToken && (isLive || event.status === 'done') && event.format !== 'knockout';
+    var canEditHere = !!editorToken && (isLive || event.status === 'done') && event.format !== 'knockout' && event.format !== 'tournament';
     var isEditable = canEditHere && inputSource === 'web';
     if (canEditHere && inputSource !== 'web') {
       els.editorBanner.textContent = 'Scores are being entered from the app right now — ask the organizer to switch to this web link.';
@@ -164,6 +175,7 @@
     }
 
     if (event.format === 'knockout') renderKnockoutRounds(event);
+    else if (event.format === 'tournament') renderGroupMatches(event);
     else renderRounds(event, isEditable);
     renderStandings(event);
 
@@ -365,7 +377,103 @@
     els.roundsPane.innerHTML = html;
   }
 
+  // ---- Tournament Mode ----
+
+  // Group fixtures are keyed g<groupIndex>d<day>m<n> (see startTournament in the app).
+  function groupIndexOfMatch(m) {
+    var hit = /^g(\d+)d/.exec(m.courtId || '');
+    return hit ? Number(hit[1]) : -1;
+  }
+
+  function renderGroupRoundBlock(event, round, isCurrent) {
+    var groups = event.tournament.groups;
+    var matches = round.matches.slice().sort(function (a, b) { return groupIndexOfMatch(a) - groupIndexOfMatch(b); });
+    var html =
+      '<div class="round-block' + (isCurrent ? ' round-current' : ' round-past') + '">' +
+      '<h2 class="round-title">Matchday ' + round.index + '<span>of ' + event.totalRoundsEstimate + '</span>' +
+      (isCurrent ? '<span class="round-live-tag">LIVE NOW</span>' : '') +
+      '</h2><div class="courts-grid">';
+    matches.forEach(function (m) {
+      var gi = groupIndexOfMatch(m);
+      var done = m.scoreA != null && m.scoreB != null;
+      var winA = done && m.scoreA > m.scoreB;
+      var winB = done && m.scoreB > m.scoreA;
+      var status = done ? 'DONE' : isCurrent ? 'LIVE' : 'WAITING';
+      var statusClass = done ? 'status-done' : isCurrent ? 'status-live' : 'status-waiting';
+      html +=
+        '<div class="court-card"><div class="court-top"><span class="court-name">' +
+        esc(groups[gi] ? groups[gi].name : 'Group') +
+        '</span><span class="status-badge ' + statusClass + '">' + status + '</span></div><div class="match-row">' +
+        '<div class="team"><span class="player-line">' + esc(playerName(event.players, m.teamA[0])) + '</span></div>' +
+        scoreBoxHtml(round.index, m.courtId, 'A', m.scoreA, m.scoreA != null, winA, false) +
+        '<span class="vs">vs</span>' +
+        scoreBoxHtml(round.index, m.courtId, 'B', m.scoreB, m.scoreB != null, winB, false) +
+        '<div class="team right"><span class="player-line">' + esc(playerName(event.players, m.teamB[0])) + '</span></div>' +
+        '</div></div>';
+    });
+    html += '</div>';
+    if (round.sitOuts && round.sitOuts.length) {
+      html += '<p class="sit-outs">Bye this matchday: ' +
+        esc(round.sitOuts.map(function (id) { return playerName(event.players, id); }).join(', ')) + '</p>';
+    }
+    return html + '</div>';
+  }
+
+  // Same shape as renderRounds: live matchday first. On a TV only the latest finished matchdays follow it.
+  function renderGroupMatches(event) {
+    var current = event.rounds.find(function (r) { return r.index === event.currentRoundIndex; });
+    var currentIsLive = !!current && !current.completed;
+    var html = '';
+    if (current) html += renderGroupRoundBlock(event, current, currentIsLive);
+    if (wideMq.matches) {
+      var recent = event.rounds
+        .filter(function (r) { return r !== current && r.completed; })
+        .sort(function (a, b) { return b.index - a.index; })
+        .slice(0, TV_RECENT_ROUNDS);
+      if (recent.length) html += '<h3 class="section-label">Recent games</h3>';
+      recent.forEach(function (r) { html += renderGroupRoundBlock(event, r, false); });
+    } else {
+      event.rounds.filter(function (r) { return r !== current; }).forEach(function (r) {
+        html += renderGroupRoundBlock(event, r, false);
+      });
+    }
+    els.roundsPane.innerHTML = html;
+  }
+
+  function renderGroupTables(event) {
+    var advance = event.tournament.advanceCount;
+    var html = '<div class="groups-grid">';
+    event.tournament.groups.forEach(function (g) {
+      html += '<div class="group-block"><h3 class="group-title">' + esc(g.name) + '</h3>' +
+        '<div class="table-header">' +
+        '<span class="th" style="width:34px">#</span><span class="th" style="flex:1">Player</span>' +
+        '<span class="th" style="width:24px">P</span><span class="th" style="width:24px">W</span>' +
+        '<span class="th" style="width:24px">D</span><span class="th" style="width:24px">L</span>' +
+        '<span class="th" style="width:34px">+/-</span><span class="th" style="width:36px;text-align:right">Pts</span></div>';
+      g.table.forEach(function (r) {
+        var adv = r.rank <= advance;
+        html +=
+          '<div class="stand-row' + (adv ? ' top' : '') + '">' +
+          '<div class="rank-badge"' + (adv ? ' style="background:var(--lime);color:#0B1E3B"' : '') + '>' + r.rank + '</div>' +
+          '<div class="stand-name-wrap"><span class="stand-name">' + esc(r.name) + '</span></div>' +
+          '<span class="stand-cell" style="width:24px;color:var(--text-muted)">' + r.played + '</span>' +
+          '<span class="stand-cell" style="width:24px;font-weight:700">' + r.wins + '</span>' +
+          '<span class="stand-cell" style="width:24px;color:var(--text-muted)">' + r.draws + '</span>' +
+          '<span class="stand-cell" style="width:24px;color:var(--text-muted)">' + r.losses + '</span>' +
+          '<span class="stand-cell" style="width:34px;color:var(--text-muted);font-size:12px">' + (r.diff > 0 ? '+' + r.diff : r.diff) + '</span>' +
+          '<span class="stand-pts" style="width:36px;color:' + (adv ? 'var(--lime)' : 'var(--text-primary)') + '">' + r.points + '</span>' +
+          '</div>';
+      });
+      html += '</div>';
+    });
+    return html + '<p class="rule-note">Win 3 · Tie 1 · Loss 0 · level on points: head-to-head, then score difference. Highlighted players advance to the knockout.</p></div>';
+  }
+
   function renderStandings(event) {
+    if (event.format === 'tournament') {
+      els.standingsPane.innerHTML = renderGroupTables(event);
+      return;
+    }
     var standings = event.standings || [];
     var html =
       '<div class="table-header">' +
@@ -396,6 +504,10 @@
         '<span class="stand-pts" style="width:40px;color:' + (top ? 'var(--lime)' : 'var(--text-primary)') + '">' + s.points + '</span>' +
         '</div>';
     });
+    if (event.tournament) {
+      // Knockout stage of a Tournament Mode event: bracket ranking first, the finished group tables beneath it.
+      html = '<h3 class="section-label">Knockout ranking</h3>' + html + '<h3 class="section-label" style="margin-top:20px">Group stage</h3>' + renderGroupTables(event);
+    }
     els.standingsPane.innerHTML = html;
   }
 

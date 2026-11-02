@@ -23,7 +23,7 @@ export function CreateFormatScreen() {
   return (
     <ScreenBackground>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StepHeader step={2} total={draft.format === 'knockout' ? 3 : 5} onBack={() => nav.goBack()} />
+        <StepHeader step={2} total={draft.format === 'tournament' ? 4 : draft.format === 'knockout' ? 3 : 5} onBack={() => nav.goBack()} />
         <Text style={styles.title}>Choose a format</Text>
         <ScrollView contentContainerStyle={styles.list}>
           {FORMATS.map((f) => {
@@ -52,8 +52,8 @@ export function CreateFormatScreen() {
             label="Continue"
             icon="chevron-forward"
             onPress={() => {
-              if (draft.format === 'knockout') {
-                // Knockout is always free-entry and has no courts — skip those steps.
+              if (draft.format === 'knockout' || draft.format === 'tournament') {
+                // Knockout and Tournament Mode are always free-entry and have no courts — skip those steps.
                 setDraft((d) => ({ ...d, scoringMode: 'free' }));
                 nav.navigate('CreatePlayers');
               } else {

@@ -5,6 +5,8 @@ export type RootStackParamList = {
   CreateScoring: undefined;
   CreateCourts: undefined;
   CreatePlayers: undefined;
+  CreateGroups: undefined;
+  GroupStage: { eventId: string };
   Dashboard: { eventId: string; tab?: 'rounds' | 'standings' };
   Knockout: { eventId: string };
   EditEvent: { eventId: string };

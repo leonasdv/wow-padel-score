@@ -34,7 +34,10 @@ export function CreatePlayersScreen() {
 
   const isTeamMode = isTeamFormat(draft.format);
   const isKnockout = draft.format === 'knockout';
-  const showGender = !isTeamMode && !isKnockout;
+  const isTournament = draft.format === 'tournament';
+  // Knockout and Tournament Mode have no gender, skip-round-1 or matches-per-player options.
+  const noRoundSetup = isKnockout || isTournament;
+  const showGender = !isTeamMode && !noRoundSetup;
 
   const addPlayer = () => {
     const trimmed = name.trim();
@@ -111,7 +114,7 @@ export function CreatePlayersScreen() {
   };
 
   const minRequired = isTeamMode ? 2 : isKnockout ? 3 : 4;
-  const skippingFirstRound = !isKnockout ? draft.players.filter((p) => p.skipFirstRound).length : 0;
+  const skippingFirstRound = !noRoundSetup ? draft.players.filter((p) => p.skipFirstRound).length : 0;
   const round1Count = draft.players.length - skippingFirstRound;
   const round1Valid = skippingFirstRound === 0 || round1Count >= minRequired;
 
@@ -123,11 +126,11 @@ export function CreatePlayersScreen() {
   };
   const matchesFeasible = matchesPerPlayer == null || matchesPerPlayerIsFeasible(draft.format, draft.players, matchesPerPlayer);
   const estimatedRounds =
-    !isKnockout && matchesPerPlayer != null && matchesFeasible && draft.players.length >= minRequired
+    !noRoundSetup && matchesPerPlayer != null && matchesFeasible && draft.players.length >= minRequired
       ? estimateRoundsForMatchesPerPlayer(draft.format, draft.players, draft.courts, matchesPerPlayer)
       : null;
 
-  const canGenerate = draft.players.length >= minRequired && round1Valid && !busy && (isKnockout || matchesFeasible);
+  const canGenerate = draft.players.length >= minRequired && round1Valid && !busy && (noRoundSetup || matchesFeasible);
 
   let bracketHint = 'Add at least 3 players to build a bracket.';
   if (isKnockout && draft.players.length >= minRequired) {
@@ -141,6 +144,10 @@ export function CreatePlayersScreen() {
 
   const onGenerate = async () => {
     if (!canGenerate) return;
+    if (isTournament) {
+      nav.navigate('CreateGroups'); // groups are set up on the next step; the event is created there
+      return;
+    }
     setBusy(true);
     const base: WowEvent = {
       id: makeId('event'),
@@ -166,7 +173,7 @@ export function CreatePlayersScreen() {
   return (
     <ScreenBackground>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StepHeader step={isKnockout ? 3 : 5} total={isKnockout ? 3 : 5} onBack={() => nav.goBack()} />
+        <StepHeader step={isTournament ? 3 : isKnockout ? 3 : 5} total={isTournament ? 4 : isKnockout ? 3 : 5} onBack={() => nav.goBack()} />
         <View style={styles.headRow}>
           <Text style={styles.title}>{isTeamMode ? 'Add teams' : 'Add players'}</Text>
           <Text style={styles.counter}>
@@ -175,6 +182,7 @@ export function CreatePlayersScreen() {
         </View>
         {isTeamMode && <Text style={styles.hint}>Each entry is a complete team — e.g. "Leon & Sinta".</Text>}
         {isKnockout && <Text style={styles.hint}>{bracketHint}</Text>}
+        {isTournament && <Text style={styles.hint}>Add every player — you'll split them into groups next.</Text>}
 
         <View style={styles.inputRow}>
           <TextInput
@@ -226,6 +234,8 @@ export function CreatePlayersScreen() {
                 ? 'Add at least 2 teams to generate rounds.'
                 : isKnockout
                   ? 'Add at least 3 players to build a bracket.'
+                  : isTournament
+                    ? 'Add at least 4 players to form groups.'
                   : 'Add at least 4 players to generate rounds.'}
             </Text>
           }
@@ -255,7 +265,7 @@ export function CreatePlayersScreen() {
                   {skipsFirstRound && <Text style={styles.skipTag}>Skips round 1</Text>}
                 </View>
                 {showGender && <GenderToggle value={item.gender} onChange={(g) => setGender(item.id, g)} />}
-                {!isKnockout && (
+                {!noRoundSetup && (
                   <Pressable onPress={() => toggleSkipFirstRound(item.id)} hitSlop={8}>
                     <Ionicons
                       name={skipsFirstRound ? 'play-skip-forward' : 'play-skip-forward-outline'}
@@ -272,7 +282,7 @@ export function CreatePlayersScreen() {
           }}
         />
 
-        {!isKnockout && !round1Valid && (
+        {!noRoundSetup && !round1Valid && (
           <Text style={[styles.hint, { color: colors.amber, marginTop: 0, marginBottom: 8 }]}>
             At least {minRequired} {isTeamMode ? 'teams' : 'players'} must play round 1 — uncheck "skip round 1" for some{' '}
             {isTeamMode ? 'teams' : 'players'}.
@@ -281,7 +291,7 @@ export function CreatePlayersScreen() {
 
         <ImportReclubModal visible={showImport} isTeamMode={isTeamMode} onClose={() => setShowImport(false)} onImport={importNames} />
 
-        {!isKnockout && (
+        {!noRoundSetup && (
           <View style={styles.matchesSection}>
             <View style={styles.matchesRow}>
               <Text style={styles.matchesLabel}>{isTeamMode ? 'Matches per team' : 'Matches per player'} (optional)</Text>
@@ -312,7 +322,7 @@ export function CreatePlayersScreen() {
         )}
 
         <View style={styles.footer}>
-          <Button label={isKnockout ? 'Build bracket' : 'Generate rounds'} icon="chevron-forward" onPress={onGenerate} disabled={!canGenerate} loading={busy} />
+          <Button label={isTournament ? 'Next: groups' : isKnockout ? 'Build bracket' : 'Generate rounds'} icon="chevron-forward" onPress={onGenerate} disabled={!canGenerate} loading={busy} />
         </View>
       </SafeAreaView>
     </ScreenBackground>

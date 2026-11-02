@@ -99,7 +99,7 @@ export function EditEventScreen() {
   };
 
   const entityWord = isTeamFormat(event.format) ? 'team' : 'player';
-  const isKnockout = event.format === 'knockout';
+  const isKnockout = event.format === 'knockout' || event.format === 'tournament'; // bracket/group fixtures are fixed — no roster/court edits
   // Knockout brackets are fixed at creation — adding/removing entrants isn't supported once built.
   const canEditRoster = event.status === 'live' && !isKnockout;
 

@@ -1,12 +1,14 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { CreateCourtsScreen } from '../screens/create/CreateCourtsScreen';
+import { CreateGroupsScreen } from '../screens/create/CreateGroupsScreen';
 import { CreateFormatScreen } from '../screens/create/CreateFormatScreen';
 import { CreateNameScreen } from '../screens/create/CreateNameScreen';
 import { CreatePlayersScreen } from '../screens/create/CreatePlayersScreen';
 import { CreateScoringScreen } from '../screens/create/CreateScoringScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { EditEventScreen } from '../screens/EditEventScreen';
+import { GroupStageScreen } from '../screens/GroupStageScreen';
 import { KnockoutScreen } from '../screens/KnockoutScreen';
 import { ResultCardScreen } from '../screens/ResultCardScreen';
 import { MainTabs } from './MainTabs';
@@ -23,7 +25,9 @@ export function RootNavigator() {
       <Stack.Screen name="CreateScoring" component={CreateScoringScreen} />
       <Stack.Screen name="CreateCourts" component={CreateCourtsScreen} />
       <Stack.Screen name="CreatePlayers" component={CreatePlayersScreen} />
+      <Stack.Screen name="CreateGroups" component={CreateGroupsScreen} />
       <Stack.Screen name="Dashboard" component={DashboardScreen} />
+      <Stack.Screen name="GroupStage" component={GroupStageScreen} />
       <Stack.Screen name="Knockout" component={KnockoutScreen} />
       <Stack.Screen name="EditEvent" component={EditEventScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="ResultCard" component={ResultCardScreen} />

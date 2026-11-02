@@ -22,6 +22,10 @@ leaderboard on the right. The page scales up further at 1700px / 2400px / 3200px
 screens. Score-entry links keep the full round list on the left so past scores stay editable.
 Narrower screens (phones, tablets) keep the tabbed layout.
 
+## Tournament Mode
+
+Tournament Mode events show a `Matches` / `Groups` view during the group stage (matchday cards labelled by group, plus one ranked table per group with the advancing places highlighted) and switch to the usual bracket once the organizer starts the knockout, with the group tables kept under the knockout ranking. Group tables arrive pre-ranked in the shared data (`tournament.groups[].table`), so the page never re-implements the tie-break rules. Score entry from the web link is not available for Tournament Mode.
+
 ## Configure
 
 Edit [`config.js`](./config.js) with your Supabase Project URL and anon key (Settings → API in
