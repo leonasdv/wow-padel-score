@@ -1,8 +1,22 @@
 import * as Crypto from 'expo-crypto';
 import { applyScore, clearScore, computeStandings, sortStandings } from './tournament';
-import { makeId } from './id';
 import { supabase } from './supabase';
 import type { WowEvent } from '../types';
+
+/** Lowercase letters + digits without look-alikes (no 0/o, 1/l/i) — easy to read out and type by hand. */
+const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+
+function shortCode(length: number): string {
+  let out = '';
+  while (out.length < length) {
+    for (const byte of Crypto.getRandomBytes(length * 2)) {
+      const idx = byte & 31; // 32 slots for a 31-char alphabet — reject the spare slot to stay unbiased
+      if (idx < CODE_ALPHABET.length) out += CODE_ALPHABET[idx];
+      if (out.length === length) break;
+    }
+  }
+  return out;
+}
 
 function buildPayload(event: WowEvent) {
   const standings = sortStandings(computeStandings(event), 'points', event.rounds);
@@ -39,17 +53,22 @@ export function editorShareUrlFor(shareId: string, editorToken: string): string 
 
 /** Publishes an event for the first time. Returns the event patched with shareId/editToken/editorToken — caller must persist it via updateEvent. */
 export async function publishEvent(event: WowEvent): Promise<WowEvent> {
-  const shareId = makeId('e');
-  const editToken = Crypto.randomUUID();
-  const editorToken = Crypto.randomUUID();
-  const { error } = await supabase.rpc('create_shared_event', {
-    p_share_id: shareId,
-    p_edit_token: editToken,
-    p_editor_token: editorToken,
-    p_payload: buildPayload(event),
-  });
-  if (error) throw error;
-  return { ...event, shareId, editToken, editorToken, shareInputSource: 'app' };
+  const editToken = Crypto.randomUUID(); // never appears in a link — stays long
+  // Short, typeable codes for the links (viewer: 7 chars ≈ 27B combos; score entry: 12 chars, a write
+  // secret so it stays harder to guess). share_id is unique, so retry on the rare collision.
+  for (let attempt = 0; ; attempt++) {
+    const shareId = shortCode(7);
+    const editorToken = shortCode(12);
+    const { error } = await supabase.rpc('create_shared_event', {
+      p_share_id: shareId,
+      p_edit_token: editToken,
+      p_editor_token: editorToken,
+      p_payload: buildPayload(event),
+    });
+    if (!error) return { ...event, shareId, editToken, editorToken, shareInputSource: 'app' };
+    const duplicate = error.code === '23505';
+    if (!duplicate || attempt >= 4) throw error;
+  }
 }
 
 /** Best-effort sync of the latest rounds/standings to a previously published event. Never throws. */

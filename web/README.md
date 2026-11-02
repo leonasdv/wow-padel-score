@@ -14,6 +14,14 @@ every 5 seconds. No build step — just HTML/CSS/vanilla JS.
   itself uses, so it can't unpublish the event or touch anything outside the current round's
   scores. See [`../supabase/README.md`](../supabase/README.md) for the full token model.
 
+## Big-screen (TV) layout
+
+On a viewport 1280px wide or more, the Rounds / Standings tabs go away and both show at once:
+the live round plus the 3 most recent finished rounds (newest first) on the left, and the
+leaderboard on the right. The page scales up further at 1700px / 2400px / 3200px for 1080p–4K
+screens. Score-entry links keep the full round list on the left so past scores stay editable.
+Narrower screens (phones, tablets) keep the tabbed layout.
+
 ## Configure
 
 Edit [`config.js`](./config.js) with your Supabase Project URL and anon key (Settings → API in

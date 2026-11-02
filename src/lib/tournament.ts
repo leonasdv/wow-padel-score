@@ -80,8 +80,50 @@ function pickSitOuts(
   return { active: sorted.slice(0, usable), sitOuts: [...sorted.slice(usable), ...capped] };
 }
 
-/** Greedily builds courts of 4 (two teams of 2), minimizing repeat partners/opponents seen so far. */
+/**
+ * Builds courts of 4 (two teams of 2) minimizing repeat partners/opponents seen so far. Runs the greedy
+ * builder many times from random orders and keeps the arrangement with the lowest squared-repeat cost,
+ * so everyone partners/faces everyone else once before any repeat happens.
+ */
 function buildQuartets(
+  playingIds: string[],
+  partnerCount: Record<string, number>,
+  opponentCount: Record<string, number>,
+  genderOf?: (id: string) => 'M' | 'F'
+): { teamA: string[]; teamB: string[] }[] {
+  const ATTEMPTS = 300;
+  let best: { quartets: { teamA: string[]; teamB: string[] }[]; partner: Record<string, number>; opponent: Record<string, number> } | null = null;
+  let bestCost = Infinity;
+  for (let i = 0; i < ATTEMPTS; i++) {
+    const partner = { ...partnerCount };
+    const opponent = { ...opponentCount };
+    const quartets = buildQuartetsGreedy(playingIds, partner, opponent, genderOf);
+    let cost = 0;
+    for (const q of quartets) {
+      const pa = partnerCount[pairKey(q.teamA[0], q.teamA[1])] ?? 0;
+      const pb = partnerCount[pairKey(q.teamB[0], q.teamB[1])] ?? 0;
+      cost += pa * pa * 2 + pb * pb * 2;
+      for (const a of q.teamA) {
+        for (const b of q.teamB) {
+          const c = opponentCount[pairKey(a, b)] ?? 0;
+          cost += c * c * 3;
+        }
+      }
+    }
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = { quartets, partner, opponent };
+      if (cost === 0) break;
+    }
+  }
+  if (!best) return [];
+  Object.assign(partnerCount, best.partner);
+  Object.assign(opponentCount, best.opponent);
+  return best.quartets;
+}
+
+/** Greedily builds courts of 4 (two teams of 2) from one random ordering. */
+function buildQuartetsGreedy(
   playingIds: string[],
   partnerCount: Record<string, number>,
   opponentCount: Record<string, number>,
@@ -199,6 +241,41 @@ export function generateRotationSchedule(
   seed?: RotationHistory,
   matchesPerPlayer?: number
 ): Round[] {
+  // Greedy rounds can paint themselves into a corner, so build several full candidate schedules (each continuing
+  // from `seed`, which is how mid-event substitutions/bench/add-player regenerate) and keep the one with the fewest
+  // squared repeats — everyone partners/faces everyone else before anyone repeats.
+  const attempts = players.length <= 12 ? 40 : 10;
+  let best: Round[] = [];
+  let bestCost = Infinity;
+  for (let i = 0; i < attempts; i++) {
+    const candidate = generateRotationScheduleOnce(format, players, courts, totalRounds, startIndex, seed, matchesPerPlayer);
+    const h = deriveRotationHistory(players, candidate);
+    let cost = 0;
+    for (const k of new Set([...Object.keys(h.opponentCount), ...Object.keys(seed?.opponentCount ?? {})])) {
+      const c = (h.opponentCount[k] ?? 0) + (seed?.opponentCount[k] ?? 0);
+      cost += c * c * 3;
+    }
+    for (const k of new Set([...Object.keys(h.partnerCount), ...Object.keys(seed?.partnerCount ?? {})])) {
+      const c = (h.partnerCount[k] ?? 0) + (seed?.partnerCount[k] ?? 0);
+      cost += c * c * 2;
+    }
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+function generateRotationScheduleOnce(
+  format: Format,
+  players: Player[],
+  courts: Court[],
+  totalRounds: number,
+  startIndex = 0,
+  seed?: RotationHistory,
+  matchesPerPlayer?: number
+): Round[] {
   const playersById = Object.fromEntries(players.map((p) => [p.id, p]));
   const genderOf = format === 'mix_americano' ? (id: string) => playersById[id].gender : undefined;
   const partnerCount: Record<string, number> = { ...(seed?.partnerCount ?? {}) };
@@ -299,26 +376,52 @@ export function deriveTeamHistory(fixedTeams: FixedTeam[], rounds: Round[]): Tea
   return { appearances, opponentCount, playStreak };
 }
 
-/** Greedily pairs teams for one round, preferring opponents they've faced least. */
+/**
+ * Pairs teams for one round as a globally optimal matching: minimizes the sum of squared prior meetings,
+ * so every team faces everyone once before anyone is rematched (squaring makes one rematch always
+ * costlier than any number of first-time meetings). Falls back to greedy for very large rounds.
+ */
 function pairTeamsMinRepeat(teamIds: string[], opponentCount: Record<string, number>): [string, string][] {
-  const remaining = shuffle(teamIds);
-  const pairs: [string, string][] = [];
-  while (remaining.length >= 2) {
-    const a = remaining.shift()!;
-    let best = remaining[0];
-    let bestScore = Infinity;
-    for (const b of remaining) {
-      const score = opponentCount[pairKey(a, b)] ?? 0;
-      if (score < bestScore) {
-        bestScore = score;
-        best = b;
-      }
+  const ids = shuffle(teamIds); // shuffle so equal-cost matchings vary
+  const cost = (a: string, b: string) => {
+    const c = opponentCount[pairKey(a, b)] ?? 0;
+    return c * c;
+  };
+  let best: [string, string][] = [];
+  let bestCost = Infinity;
+  let nodes = 0;
+  const NODE_LIMIT = 40000;
+
+  const search = (remaining: string[], current: [string, string][], total: number) => {
+    if (total >= bestCost || nodes++ > NODE_LIMIT) return;
+    if (remaining.length < 2) {
+      bestCost = total;
+      best = [...current];
+      return;
     }
-    removeFromArray(remaining, best);
-    pairs.push([a, best]);
-    opponentCount[pairKey(a, best)] = (opponentCount[pairKey(a, best)] ?? 0) + 1;
+    const [a, ...rest] = remaining;
+    const options = rest.map((b) => ({ b, c: cost(a, b) })).sort((x, y) => x.c - y.c);
+    for (const { b, c } of options) {
+      current.push([a, b]);
+      search(rest.filter((x) => x !== b), current, total + c);
+      current.pop();
+    }
+  };
+  search(ids, [], 0);
+
+  if (best.length === 0 && ids.length >= 2) {
+    // Node limit hit before any complete matching — greedy fallback.
+    const remaining = [...ids];
+    while (remaining.length >= 2) {
+      const a = remaining.shift()!;
+      let pick = remaining[0];
+      for (const b of remaining) if (cost(a, b) < cost(a, pick)) pick = b;
+      removeFromArray(remaining, pick);
+      best.push([a, pick]);
+    }
   }
-  return pairs;
+  for (const [a, b] of best) opponentCount[pairKey(a, b)] = (opponentCount[pairKey(a, b)] ?? 0) + 1;
+  return best;
 }
 
 /**
@@ -332,6 +435,40 @@ function pairTeamsMinRepeat(teamIds: string[], opponentCount: Record<string, num
  * courts idle — so the final round(s) may only fill some of the available courts.
  */
 export function generateTeamAmericanoSchedule(
+  fixedTeams: FixedTeam[],
+  courts: Court[],
+  totalRounds: number,
+  startIndex = 0,
+  seed?: TeamHistory,
+  matchesPerTeam?: number
+): Round[] {
+  // Build several full candidate schedules (each continuing from `seed`, so mid-event substitutions, benching and
+  // late joiners regenerate correctly) and keep the one with the fewest squared rematches: every team faces every
+  // other team once before anyone is rematched.
+  const attempts = fixedTeams.length <= 10 ? 60 : 15;
+  const teamOfPlayer: Record<string, string> = {};
+  fixedTeams.forEach((t) => t.playerIds.forEach((pid) => (teamOfPlayer[pid] = t.id)));
+  let best: Round[] = [];
+  let bestCost = Infinity;
+  for (let i = 0; i < attempts; i++) {
+    const candidate = generateTeamAmericanoScheduleOnce(fixedTeams, courts, totalRounds, startIndex, seed, matchesPerTeam);
+    const counts: Record<string, number> = { ...(seed?.opponentCount ?? {}) };
+    for (const r of candidate) {
+      for (const m of r.matches) {
+        const k = pairKey(teamOfPlayer[m.teamA[0]], teamOfPlayer[m.teamB[0]]);
+        counts[k] = (counts[k] ?? 0) + 1;
+      }
+    }
+    const cost = Object.values(counts).reduce((sum, c) => sum + c * c, 0);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+function generateTeamAmericanoScheduleOnce(
   fixedTeams: FixedTeam[],
   courts: Court[],
   totalRounds: number,

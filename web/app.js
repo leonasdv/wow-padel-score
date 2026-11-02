@@ -28,6 +28,11 @@
   var hasShownContent = false;
   var activeTab = 'rounds';
   var currentEvent = null; // last-rendered payload — read by the score-tap handler
+  var lastRender = null; // { event, updatedAt, inputSource } — lets a resize across the TV breakpoint re-render
+  // Big-screen (TV) layout: rounds and leaderboard side by side instead of behind tabs. Mirrors the
+  // `min-width: 1280px` block at the bottom of styles.css.
+  var wideMq = window.matchMedia('(min-width: 1280px)');
+  var TV_RECENT_ROUNDS = 3;
 
   var els = {
     loading: document.getElementById('stateLoading'),
@@ -137,6 +142,7 @@
 
   function render(event, updatedAt, inputSource) {
     currentEvent = event;
+    lastRender = { event: event, updatedAt: updatedAt, inputSource: inputSource };
     els.eventName.textContent = event.name;
     els.eventMeta.textContent =
       (FORMAT_NAMES[event.format] || event.format) + ' · ' + event.players.length + ' players · ' + event.courts.length + ' courts';
@@ -339,6 +345,20 @@
     var otherRounds = currentRound ? event.rounds.filter(function (r) { return r.index !== event.currentRoundIndex; }) : event.rounds;
     var html = '';
     if (currentRound) html += renderRoundBlock(event, currentRound, isEditable, true);
+    // TV / big-screen display (view-only): live round, then only the most recent finished rounds,
+    // newest first — upcoming rounds are noise on a wall screen. Score-entry links keep the full list.
+    if (wideMq.matches && !editorToken) {
+      var recent = otherRounds
+        .filter(function (r) { return r.completed || r.index < event.currentRoundIndex; })
+        .sort(function (a, b) { return b.index - a.index; })
+        .slice(0, TV_RECENT_ROUNDS);
+      if (recent.length) html += '<h3 class="section-label">Recent games</h3>';
+      recent.forEach(function (round) {
+        html += renderRoundBlock(event, round, isEditable, false);
+      });
+      els.roundsPane.innerHTML = html;
+      return;
+    }
     otherRounds.forEach(function (round) {
       html += renderRoundBlock(event, round, isEditable, false);
     });
@@ -383,12 +403,23 @@
     activeTab = tab;
     els.tabRoundsBtn.classList.toggle('active', tab === 'rounds');
     els.tabStandingsBtn.classList.toggle('active', tab === 'standings');
-    els.roundsPane.hidden = tab !== 'rounds';
-    els.standingsPane.hidden = tab !== 'standings';
+    // On a wide screen both panes show side by side (tabs are hidden in CSS), so nothing is tab-hidden.
+    var wide = wideMq.matches;
+    els.roundsPane.hidden = !wide && tab !== 'rounds';
+    els.standingsPane.hidden = !wide && tab !== 'standings';
   }
 
   els.tabRoundsBtn.addEventListener('click', function () { setTab('rounds'); });
   els.tabStandingsBtn.addEventListener('click', function () { setTab('standings'); });
+
+  // Crossing the breakpoint (window resize, TV rotation) swaps between the tabbed and side-by-side layouts.
+  function onLayoutChange() {
+    setTab(activeTab);
+    if (lastRender) render(lastRender.event, lastRender.updatedAt, lastRender.inputSource);
+  }
+  if (wideMq.addEventListener) wideMq.addEventListener('change', onLayoutChange);
+  else if (wideMq.addListener) wideMq.addListener(onLayoutChange);
+  setTab(activeTab); // initial state — standings pane starts `hidden` in the HTML, which a wide screen must undo
 
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
