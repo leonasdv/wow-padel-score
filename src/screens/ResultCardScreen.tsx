@@ -67,7 +67,8 @@ export function ResultCardScreen() {
     );
   }
 
-  const dateLabel = new Date(event.createdAt)
+  // Stamped with today's date (when the card is generated/shared), not when the event was created.
+  const dateLabel = new Date()
     .toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
     .toUpperCase();
 
