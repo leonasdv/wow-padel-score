@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { Button } from '../components/Button';
 import { IconButton, LivePulseDot, ScreenBackground } from '../components/Misc';
-import { RenameModal } from '../components/RenameModal';
+import { PlayerPickerModal } from '../components/PlayerPickerModal';
 import { QrCodeModal } from '../components/QrCodeModal';
 import { ScoreKeypad } from '../components/ScoreKeypad';
 import { SegmentedTabs } from '../components/SegmentedTabs';
@@ -31,7 +31,6 @@ import {
   reopenEvent,
   reshuffleUpcoming,
   sortStandings,
-  replaceParticipant,
   substituteParticipant,
 } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
@@ -299,19 +298,11 @@ export function DashboardScreen() {
       });
   })();
 
-  // Plain name replacement: same participant id, so every slot and recorded score stays put.
-  const confirmRename = async (name: string) => {
-    if (!swapOutgoing) return;
-    const { id } = swapOutgoing;
-    setSwapOutgoing(null);
-    await updateEvent(event.id, (e) => replaceParticipant(e, id, name));
-  };
-
   const confirmSwap = async (incomingId: string) => {
     if (!swapOutgoing) return;
-    const { id: outgoingId } = swapOutgoing;
+    const { id: outgoingId, round: roundIndex } = swapOutgoing;
     setSwapOutgoing(null);
-    await updateEvent(event.id, (e) => substituteParticipant(e, outgoingId, incomingId));
+    await updateEvent(event.id, (e) => substituteParticipant(e, outgoingId, incomingId, roundIndex));
   };
 
   return (
@@ -762,17 +753,14 @@ export function DashboardScreen() {
           onConfirm={onAddPlayer}
         />
 
-        <RenameModal
+        <PlayerPickerModal
           visible={!!swapOutgoing}
           title={`Replace ${swapOutgoing ? playerName(event.players, swapOutgoing.id) : entityWord}`}
-          label={`New ${entityWord} name (keeps their slot and scores — nothing is reshuffled)`}
-          placeholder="Enter a name"
-          confirmText="Replace"
-          quickPicks={swapCandidates.map((c) => ({ id: c.id, label: c.tag ? `${c.name} · ${c.tag}` : c.name }))}
-          quickPicksLabel="Or swap places with someone already in the event"
-          onPickExisting={confirmSwap}
+          subtitle="Pick from the player list. They swap places in this round and later ones — rounds with a score entered never change."
+          items={swapCandidates}
+          emptyText={`No other ${entityWord}s available to swap in for this round.`}
+          onPick={confirmSwap}
           onClose={() => setSwapOutgoing(null)}
-          onConfirm={confirmRename}
         />
 
         <QrCodeModal visible={!!qrUrl} url={qrUrl ?? ''} onClose={() => setQrUrl(null)} />

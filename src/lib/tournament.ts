@@ -1114,18 +1114,20 @@ export function replaceParticipant(event: WowEvent, playerId: string, newName: s
  * pre-generated, the rounds after the current one are rebuilt from the real play counts, which
  * rebalances them. Ranking formats build each round from live counts, so they self-balance.
  */
-export function substituteParticipant(event: WowEvent, outgoingId: string, incomingId: string): WowEvent {
+export function substituteParticipant(event: WowEvent, outgoingId: string, incomingId: string, roundIndex: number = event.currentRoundIndex): WowEvent {
   const isScored = (m: { scoreA: number | null; scoreB: number | null }) => m.scoreA != null || m.scoreB != null;
   const swap = (pid: string) => (pid === outgoingId ? incomingId : pid === incomingId ? outgoingId : pid);
   const involves = (m: { teamA: string[]; teamB: string[] }) =>
     [...m.teamA, ...m.teamB].some((p) => p === outgoingId || p === incomingId);
+  // The swap happens in the round the organizer tapped (live or still ahead). Finished rounds never change.
+  const target = event.rounds.find((r) => r.index === roundIndex);
+  if (!target || target.completed) return event;
   // A match with a score entered has ended — it is never touched. If either player is in one, the
   // swap is refused outright (a half-swap would leave one of them double-booked or missing).
-  const current = event.rounds.find((r) => r.index === event.currentRoundIndex && !r.completed);
-  if (current?.matches.some((m) => isScored(m) && involves(m))) return event;
+  if (target.matches.some((m) => isScored(m) && involves(m))) return event;
 
   const swapped = event.rounds.map((r) => {
-    if (r.completed || r.index !== event.currentRoundIndex) return r;
+    if (r.index !== roundIndex) return r;
     const matches = r.matches.map((m) => (isScored(m) ? m : { ...m, teamA: m.teamA.map(swap), teamB: m.teamB.map(swap) }));
     return { ...r, matches, sitOuts: r.sitOuts.map(swap) };
   });
@@ -1133,7 +1135,7 @@ export function substituteParticipant(event: WowEvent, outgoingId: string, incom
 
   if (event.format === 'knockout' || event.format === 'tournament' || event.format === 'team_mexicano' || isRankingBased(event.format)) return updated;
 
-  const kept = swapped.filter((r) => r.completed || r.index <= event.currentRoundIndex);
+  const kept = swapped.filter((r) => r.completed || r.index <= roundIndex);
   // Later rounds that already have a score are finished matches too — keep them exactly as played.
   const locked = swapped.filter((r) => !kept.includes(r) && r.matches.some(isScored));
   const remaining = event.totalRoundsEstimate - kept.length - locked.length;
@@ -1146,7 +1148,7 @@ export function substituteParticipant(event: WowEvent, outgoingId: string, incom
       : generateRotationSchedule(event.format, activePlayers(event.players), event.courts, count, startIndex, deriveRotationHistory(event.players, history), event.matchesPerPlayer);
   const regenerated = generate(remaining, kept.length);
 
-  // Fill the unscored slots after the live round with fresh rounds; scored ones stay in place.
+  // Fill the unscored slots after the swapped round with fresh rounds; scored ones stay in place.
   const lockedByIndex = new Map(locked.map((r) => [r.index, r]));
   const rounds = [...kept];
   let next = 0;
