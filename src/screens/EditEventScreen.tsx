@@ -46,7 +46,7 @@ export function EditEventScreen() {
     let cancelled = false;
     publishEvent(event)
       .then((published) => {
-        if (!cancelled) updateEvent(event.id, () => published);
+        if (!cancelled) updateEvent(event.id, () => published, { skipHistory: true });
       })
       .catch((err) => console.warn('Failed to auto-publish event', event.id, err?.message));
     return () => {
@@ -121,7 +121,7 @@ export function EditEventScreen() {
     setInputSourceBusy(true);
     try {
       const updated = await setShareInputSource(event, source);
-      await updateEvent(event.id, () => updated);
+      await updateEvent(event.id, () => updated, { skipHistory: true });
     } catch (err: any) {
       Alert.alert('Something went wrong', err?.message ?? "Couldn't switch score entry. Check your connection and try again.");
     } finally {

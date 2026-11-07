@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddPlayerModal } from '../components/AddPlayerModal';
 import { Button } from '../components/Button';
 import { IconButton, LivePulseDot, ScreenBackground } from '../components/Misc';
-import { PlayerPickerModal } from '../components/PlayerPickerModal';
+import { RenameModal } from '../components/RenameModal';
 import { QrCodeModal } from '../components/QrCodeModal';
 import { ScoreKeypad } from '../components/ScoreKeypad';
 import { SegmentedTabs } from '../components/SegmentedTabs';
@@ -31,6 +31,7 @@ import {
   reopenEvent,
   reshuffleUpcoming,
   sortStandings,
+  replaceParticipant,
   substituteParticipant,
 } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
@@ -70,7 +71,7 @@ function matchesForPlayer(rounds: Round[], playerId: string): PlayerRoundEntry[]
 export function DashboardScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<R>();
-  const { getEvent, updateEvent, syncSharedScores } = useEvents();
+  const { getEvent, updateEvent, syncSharedScores, undoEvent, redoEvent, canUndo, canRedo } = useEvents();
   const event = getEvent(route.params.eventId);
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -125,7 +126,7 @@ export function DashboardScreen() {
       let target = event;
       if (!target.shareId) {
         const published = await publishEvent(target);
-        await updateEvent(event.id, () => published);
+        await updateEvent(event.id, () => published, { skipHistory: true });
         target = published;
       }
       setQrUrl(shareUrlFor(target.shareId!));
@@ -284,7 +285,11 @@ export function DashboardScreen() {
     const round = event.rounds.find((r) => r.index === swapOutgoing.round);
     if (!round) return [];
     const thisMatch = round.matches.find((m) => m.teamA.includes(swapOutgoing.id) || m.teamB.includes(swapOutgoing.id));
-    const excluded = new Set([swapOutgoing.id, ...(thisMatch ? [...thisMatch.teamA, ...thisMatch.teamB] : [])]);
+    const scored = (m: { scoreA: number | null; scoreB: number | null }) => m.scoreA != null || m.scoreB != null;
+    // Ended matches (score entered) are frozen — nobody in one can be swapped in or out.
+    if (thisMatch && scored(thisMatch)) return [];
+    const frozen = round.matches.filter(scored).flatMap((m) => [...m.teamA, ...m.teamB]);
+    const excluded = new Set([swapOutgoing.id, ...frozen, ...(thisMatch ? [...thisMatch.teamA, ...thisMatch.teamB] : [])]);
     return event.players
       .filter((p) => !excluded.has(p.id))
       .map((p) => {
@@ -293,6 +298,14 @@ export function DashboardScreen() {
         return { id: p.id, name: p.name, tag: court ? court.name : undefined };
       });
   })();
+
+  // Plain name replacement: same participant id, so every slot and recorded score stays put.
+  const confirmRename = async (name: string) => {
+    if (!swapOutgoing) return;
+    const { id } = swapOutgoing;
+    setSwapOutgoing(null);
+    await updateEvent(event.id, (e) => replaceParticipant(e, id, name));
+  };
 
   const confirmSwap = async (incomingId: string) => {
     if (!swapOutgoing) return;
@@ -318,6 +331,8 @@ export function DashboardScreen() {
                   <Text style={styles.syncPillText}>Sync</Text>
                 </Pressable>
               )}
+              <IconButton name="arrow-undo-outline" size={38} onPress={() => undoEvent(event.id)} disabled={!canUndo(event.id)} />
+              <IconButton name="arrow-redo-outline" size={38} onPress={() => redoEvent(event.id)} disabled={!canRedo(event.id)} />
               {event.status === 'live' && <IconButton name="shuffle-outline" size={38} onPress={onReshuffle} />}
               <IconButton name="ellipsis-horizontal" size={38} onPress={() => nav.navigate('EditEvent', { eventId: event.id })} />
             </View>
@@ -747,14 +762,17 @@ export function DashboardScreen() {
           onConfirm={onAddPlayer}
         />
 
-        <PlayerPickerModal
+        <RenameModal
           visible={!!swapOutgoing}
           title={`Replace ${swapOutgoing ? playerName(event.players, swapOutgoing.id) : entityWord}`}
-          subtitle="They'll swap places from here on — completed rounds and current standings stay untouched, and total matches for each stay the same."
-          items={swapCandidates}
-          emptyText={`No other ${entityWord}s to swap in right now.`}
-          onPick={confirmSwap}
+          label={`New ${entityWord} name (keeps their slot and scores — nothing is reshuffled)`}
+          placeholder="Enter a name"
+          confirmText="Replace"
+          quickPicks={swapCandidates.map((c) => ({ id: c.id, label: c.tag ? `${c.name} · ${c.tag}` : c.name }))}
+          quickPicksLabel="Or swap places with someone already in the event"
+          onPickExisting={confirmSwap}
           onClose={() => setSwapOutgoing(null)}
+          onConfirm={confirmRename}
         />
 
         <QrCodeModal visible={!!qrUrl} url={qrUrl ?? ''} onClose={() => setQrUrl(null)} />

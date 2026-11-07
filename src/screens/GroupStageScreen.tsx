@@ -139,7 +139,7 @@ export function GroupStageScreen() {
       let target = event;
       if (!target.shareId) {
         const published = await publishEvent(target);
-        await updateEvent(event.id, () => published);
+        await updateEvent(event.id, () => published, { skipHistory: true });
         target = published;
       }
       setQrUrl(shareUrlFor(target.shareId!));

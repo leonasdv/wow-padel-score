@@ -5,6 +5,22 @@ import { pullPendingScores, pushEventUpdate } from '../lib/share';
 import type { WowEvent } from '../types';
 
 const STORAGE_KEY = '@wow_padel_score/events';
+const HISTORY_KEY = '@wow_padel_score/history';
+/** Snapshots kept per event for undo/redo — older ones fall off the back. */
+const MAX_HISTORY = 40;
+
+interface EventHistory {
+  past: WowEvent[];
+  future: WowEvent[];
+}
+
+/** Link/publish state belongs to the live share, not to the game — undo/redo must never roll it back. */
+const withCurrentShareFields = (snapshot: WowEvent, current: WowEvent): WowEvent => ({
+  ...snapshot,
+  shareId: current.shareId,
+  editorToken: current.editorToken,
+  shareInputSource: current.shareInputSource,
+});
 /** How often to check for scores submitted from a web score-entry link — mirrors the web viewer's own poll cadence. */
 const WEB_SCORE_POLL_MS = 5000;
 
@@ -13,7 +29,14 @@ interface EventsContextValue {
   loading: boolean;
   getEvent: (id: string) => WowEvent | undefined;
   addEvent: (event: WowEvent) => Promise<void>;
-  updateEvent: (id: string, updater: (event: WowEvent) => WowEvent) => Promise<void>;
+  /** `skipHistory` keeps housekeeping writes (auto-publish, share settings) out of the undo trail. */
+  updateEvent: (id: string, updater: (event: WowEvent) => WowEvent, opts?: { skipHistory?: boolean }) => Promise<void>;
+  /** Steps the event back to its previous state (scores, swaps, renames, added players…). */
+  undoEvent: (id: string) => Promise<void>;
+  /** Re-applies the last undone change. Cleared as soon as a new change is made. */
+  redoEvent: (id: string) => Promise<void>;
+  canUndo: (id: string) => boolean;
+  canRedo: (id: string) => boolean;
   deleteEvent: (id: string) => Promise<void>;
   /** Overwrites the entire local roster — used to apply a merged/imported backup in one write. */
   replaceAllEvents: (events: WowEvent[]) => Promise<void>;
@@ -30,12 +53,32 @@ const EventsContext = createContext<EventsContextValue | null>(null);
 export function EventsProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<WowEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const historyRef = useRef<Record<string, EventHistory>>({});
+  const [historyTick, setHistoryTick] = useState(0);
+
+  const saveHistory = useCallback(() => {
+    setHistoryTick((t) => t + 1);
+    AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(historyRef.current)).catch(() => {});
+  }, []);
+
+  /** Remembers `before` so it can be revisited; any new change wipes the redo branch. */
+  const recordHistory = useCallback(
+    (before: WowEvent, after: WowEvent) => {
+      if (JSON.stringify(before) === JSON.stringify(after)) return;
+      const h = historyRef.current[before.id] ?? { past: [], future: [] };
+      historyRef.current[before.id] = { past: [...h.past, before].slice(-MAX_HISTORY), future: [] };
+      saveHistory();
+    },
+    [saveHistory]
+  );
 
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) setEvents(JSON.parse(raw));
+        const rawHistory = await AsyncStorage.getItem(HISTORY_KEY);
+        if (rawHistory) historyRef.current = JSON.parse(rawHistory);
       } finally {
         setLoading(false);
       }
@@ -57,26 +100,31 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateEvent = useCallback(
-    async (id: string, updater: (event: WowEvent) => WowEvent) => {
+    async (id: string, updater: (event: WowEvent) => WowEvent, opts?: { skipHistory?: boolean }) => {
       let updated: WowEvent | undefined;
       await persist(
         events.map((e) => {
           if (e.id !== id) return e;
           updated = updater(e);
+          if (!opts?.skipHistory) recordHistory(e, updated);
           return updated;
         })
       );
       // Best-effort sync to the published share link, if any — never blocks or throws into the caller.
       if (updated?.shareId) pushEventUpdate(updated).catch(() => {});
     },
-    [events, persist]
+    [events, persist, recordHistory]
   );
 
   const deleteEvent = useCallback(
     async (id: string) => {
       await persist(events.filter((e) => e.id !== id));
+      if (historyRef.current[id]) {
+        delete historyRef.current[id];
+        saveHistory();
+      }
     },
-    [events, persist]
+    [events, persist, saveHistory]
   );
 
   const replaceAllEvents = useCallback(
@@ -103,13 +151,14 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
         const updated = await pullPendingScores(ev);
         if (updated === ev) return; // nothing was pending
         const latest = eventsRef.current;
+        recordHistory(ev, updated);
         await persist(latest.map((e) => (e.id === ev.id ? updated : e)));
         pushEventUpdate(updated).catch(() => {});
       } catch {
         // Best-effort — picked up again on the next tick / next foreground / next manual sync.
       }
     },
-    [persist]
+    [persist, recordHistory]
   );
 
   const syncAllWebEvents = useCallback(async () => {
@@ -152,9 +201,31 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
     if (!loading) syncAllWebEvents();
   }, [loading, syncAllWebEvents]);
 
+  const stepHistory = useCallback(
+    async (id: string, direction: 'undo' | 'redo') => {
+      const current = eventsRef.current.find((e) => e.id === id);
+      const h = historyRef.current[id];
+      if (!current || !h) return;
+      const from = direction === 'undo' ? h.past : h.future;
+      if (!from.length) return;
+      const target = withCurrentShareFields(from[from.length - 1], current);
+      const rest = from.slice(0, -1);
+      historyRef.current[id] =
+        direction === 'undo' ? { past: rest, future: [...h.future, current] } : { past: [...h.past, current], future: rest };
+      saveHistory();
+      await persist(eventsRef.current.map((e) => (e.id === id ? target : e)));
+      if (target.shareId) pushEventUpdate(target).catch(() => {});
+    },
+    [persist, saveHistory]
+  );
+  const undoEvent = useCallback((id: string) => stepHistory(id, 'undo'), [stepHistory]);
+  const redoEvent = useCallback((id: string) => stepHistory(id, 'redo'), [stepHistory]);
+  const canUndo = useCallback((id: string) => (historyRef.current[id]?.past.length ?? 0) > 0, [historyTick]);
+  const canRedo = useCallback((id: string) => (historyRef.current[id]?.future.length ?? 0) > 0, [historyTick]);
+
   const value = useMemo(
-    () => ({ events, loading, getEvent, addEvent, updateEvent, deleteEvent, replaceAllEvents, syncSharedScores }),
-    [events, loading, getEvent, addEvent, updateEvent, deleteEvent, replaceAllEvents, syncSharedScores]
+    () => ({ events, loading, getEvent, addEvent, updateEvent, undoEvent, redoEvent, canUndo, canRedo, deleteEvent, replaceAllEvents, syncSharedScores }),
+    [events, loading, getEvent, addEvent, updateEvent, undoEvent, redoEvent, canUndo, canRedo, deleteEvent, replaceAllEvents, syncSharedScores]
   );
 
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>;

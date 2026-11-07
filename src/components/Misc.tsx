@@ -21,15 +21,17 @@ export function IconButton({
   name,
   onPress,
   size = 40,
+  disabled = false,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   onPress?: () => void;
   size?: number;
+  disabled?: boolean;
 }) {
   const { colors } = useTheme();
   const s = useStyles(colors);
   return (
-    <Pressable onPress={onPress} style={[s.iconBtn, { width: size, height: size, borderRadius: size * 0.32 }]}>
+    <Pressable onPress={onPress} disabled={disabled} style={[s.iconBtn, { width: size, height: size, borderRadius: size * 0.32 }, disabled && { opacity: 0.35 }]}>
       <Ionicons name={name} size={size * 0.5} color={colors.textPrimary} />
     </Pressable>
   );

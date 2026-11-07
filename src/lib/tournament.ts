@@ -1115,10 +1115,18 @@ export function replaceParticipant(event: WowEvent, playerId: string, newName: s
  * rebalances them. Ranking formats build each round from live counts, so they self-balance.
  */
 export function substituteParticipant(event: WowEvent, outgoingId: string, incomingId: string): WowEvent {
+  const isScored = (m: { scoreA: number | null; scoreB: number | null }) => m.scoreA != null || m.scoreB != null;
   const swap = (pid: string) => (pid === outgoingId ? incomingId : pid === incomingId ? outgoingId : pid);
+  const involves = (m: { teamA: string[]; teamB: string[] }) =>
+    [...m.teamA, ...m.teamB].some((p) => p === outgoingId || p === incomingId);
+  // A match with a score entered has ended — it is never touched. If either player is in one, the
+  // swap is refused outright (a half-swap would leave one of them double-booked or missing).
+  const current = event.rounds.find((r) => r.index === event.currentRoundIndex && !r.completed);
+  if (current?.matches.some((m) => isScored(m) && involves(m))) return event;
+
   const swapped = event.rounds.map((r) => {
     if (r.completed || r.index !== event.currentRoundIndex) return r;
-    const matches = r.matches.map((m) => ({ ...m, teamA: m.teamA.map(swap), teamB: m.teamB.map(swap) }));
+    const matches = r.matches.map((m) => (isScored(m) ? m : { ...m, teamA: m.teamA.map(swap), teamB: m.teamB.map(swap) }));
     return { ...r, matches, sitOuts: r.sitOuts.map(swap) };
   });
   const updated = { ...event, rounds: swapped };
@@ -1126,18 +1134,27 @@ export function substituteParticipant(event: WowEvent, outgoingId: string, incom
   if (event.format === 'knockout' || event.format === 'tournament' || event.format === 'team_mexicano' || isRankingBased(event.format)) return updated;
 
   const kept = swapped.filter((r) => r.completed || r.index <= event.currentRoundIndex);
-  const remaining = event.totalRoundsEstimate - kept.length;
+  // Later rounds that already have a score are finished matches too — keep them exactly as played.
+  const locked = swapped.filter((r) => !kept.includes(r) && r.matches.some(isScored));
+  const remaining = event.totalRoundsEstimate - kept.length - locked.length;
   if (remaining <= 0) return updated;
+  const history = [...kept, ...locked];
 
-  if (event.format === 'team_americano') {
-    const seed = deriveTeamHistory(event.fixedTeams!, kept);
-    const regenerated = generateTeamAmericanoSchedule(activeFixedTeams(event.fixedTeams!, event.players), event.courts, remaining, kept.length, seed, event.matchesPerPlayer);
-    const rounds = [...kept, ...regenerated];
-    return { ...updated, rounds, totalRoundsEstimate: rounds.length };
+  const generate = (count: number, startIndex: number) =>
+    event.format === 'team_americano'
+      ? generateTeamAmericanoSchedule(activeFixedTeams(event.fixedTeams!, event.players), event.courts, count, startIndex, deriveTeamHistory(event.fixedTeams!, history), event.matchesPerPlayer)
+      : generateRotationSchedule(event.format, activePlayers(event.players), event.courts, count, startIndex, deriveRotationHistory(event.players, history), event.matchesPerPlayer);
+  const regenerated = generate(remaining, kept.length);
+
+  // Fill the unscored slots after the live round with fresh rounds; scored ones stay in place.
+  const lockedByIndex = new Map(locked.map((r) => [r.index, r]));
+  const rounds = [...kept];
+  let next = 0;
+  for (let idx = kept.length + 1; rounds.length < kept.length + locked.length + regenerated.length; idx++) {
+    const lockedRound = lockedByIndex.get(idx);
+    if (lockedRound) rounds.push(lockedRound);
+    else rounds.push({ ...regenerated[next++], index: idx });
   }
-  const seed = deriveRotationHistory(event.players, kept);
-  const regenerated = generateRotationSchedule(event.format, activePlayers(event.players), event.courts, remaining, kept.length, seed, event.matchesPerPlayer);
-  const rounds = [...kept, ...regenerated];
   return { ...updated, rounds, totalRoundsEstimate: rounds.length };
 }
 
