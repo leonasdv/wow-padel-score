@@ -2,25 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { pullPendingScores, pushEventUpdate } from '../lib/share';
+import { recordHistory as recordSnapshot, stepHistory as stepSnapshot, type HistoryMap } from '../lib/history';
 import type { WowEvent } from '../types';
 
 const STORAGE_KEY = '@wow_padel_score/events';
 const HISTORY_KEY = '@wow_padel_score/history';
-/** Snapshots kept per event for undo/redo — older ones fall off the back. */
-const MAX_HISTORY = 40;
-
-interface EventHistory {
-  past: WowEvent[];
-  future: WowEvent[];
-}
-
-/** Link/publish state belongs to the live share, not to the game — undo/redo must never roll it back. */
-const withCurrentShareFields = (snapshot: WowEvent, current: WowEvent): WowEvent => ({
-  ...snapshot,
-  shareId: current.shareId,
-  editorToken: current.editorToken,
-  shareInputSource: current.shareInputSource,
-});
 /** How often to check for scores submitted from a web score-entry link — mirrors the web viewer's own poll cadence. */
 const WEB_SCORE_POLL_MS = 5000;
 
@@ -53,7 +39,7 @@ const EventsContext = createContext<EventsContextValue | null>(null);
 export function EventsProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<WowEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const historyRef = useRef<Record<string, EventHistory>>({});
+  const historyRef = useRef<HistoryMap>({});
   const [historyTick, setHistoryTick] = useState(0);
 
   const saveHistory = useCallback(() => {
@@ -64,10 +50,7 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
   /** Remembers `before` so it can be revisited; any new change wipes the redo branch. */
   const recordHistory = useCallback(
     (before: WowEvent, after: WowEvent) => {
-      if (JSON.stringify(before) === JSON.stringify(after)) return;
-      const h = historyRef.current[before.id] ?? { past: [], future: [] };
-      historyRef.current[before.id] = { past: [...h.past, before].slice(-MAX_HISTORY), future: [] };
-      saveHistory();
+      if (recordSnapshot(historyRef.current, before, after)) saveHistory();
     },
     [saveHistory]
   );
@@ -204,14 +187,9 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
   const stepHistory = useCallback(
     async (id: string, direction: 'undo' | 'redo') => {
       const current = eventsRef.current.find((e) => e.id === id);
-      const h = historyRef.current[id];
-      if (!current || !h) return;
-      const from = direction === 'undo' ? h.past : h.future;
-      if (!from.length) return;
-      const target = withCurrentShareFields(from[from.length - 1], current);
-      const rest = from.slice(0, -1);
-      historyRef.current[id] =
-        direction === 'undo' ? { past: rest, future: [...h.future, current] } : { past: [...h.past, current], future: rest };
+      if (!current) return;
+      const target = stepSnapshot(historyRef.current, current, direction);
+      if (!target) return;
       saveHistory();
       await persist(eventsRef.current.map((e) => (e.id === id ? target : e)));
       if (target.shareId) pushEventUpdate(target).catch(() => {});
