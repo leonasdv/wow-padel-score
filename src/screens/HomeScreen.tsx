@@ -5,6 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusPill } from '../components/Misc';
+import { ThemeToggleButton } from '../components/ThemeToggleButton';
 import { WowLogo } from '../components/WowLogo';
 import { useDraft } from '../data/draft';
 import { useEvents } from '../data/store';
@@ -149,8 +150,11 @@ export function HomeScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View style={styles.logoBadge}>
-            <WowLogo size={22} subtitle />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={styles.logoBadge}>
+              <WowLogo size={22} subtitle />
+            </View>
+            <ThemeToggleButton />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Pressable style={styles.backupBtn} onPress={onOpenBackupMenu} disabled={backupBusy} hitSlop={8}>

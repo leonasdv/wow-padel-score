@@ -6,7 +6,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AlertHost } from './src/components/AlertHost';
 import { SplashOverlay } from './src/components/SplashOverlay';
-import { ThemeToggleButton } from './src/components/ThemeToggleButton';
 import { DraftProvider } from './src/data/draft';
 import { EventsProvider } from './src/data/store';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -48,7 +47,6 @@ function AppShell() {
           <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
         </DraftProvider>
       </EventsProvider>
-      <ThemeToggleButton />
       <AlertHost />
       {showSplash && <SplashOverlay />}
     </SafeAreaProvider>
