@@ -5,7 +5,6 @@ import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusPill } from '../components/Misc';
-import { ThemeToggleButton } from '../components/ThemeToggleButton';
 import { WowLogo } from '../components/WowLogo';
 import { useDraft } from '../data/draft';
 import { useEvents } from '../data/store';
@@ -31,7 +30,7 @@ export function HomeScreen() {
   const { reset } = useDraft();
   const liveCount = events.filter((e) => e.status === 'live').length;
   const [backupBusy, setBackupBusy] = useState(false);
-  const { colors } = useTheme();
+  const { colors, toggleTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const onOpenEvent = (ev: WowEvent) => {
@@ -150,12 +149,9 @@ export function HomeScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={styles.logoBadge}>
-              <WowLogo size={22} subtitle />
-            </View>
-            <ThemeToggleButton />
-          </View>
+          <Pressable style={styles.logoBadge} onPress={toggleTheme} hitSlop={8} accessibilityRole="button" accessibilityLabel="Switch dark/light theme">
+            <WowLogo size={22} subtitle />
+          </Pressable>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Pressable style={styles.backupBtn} onPress={onOpenBackupMenu} disabled={backupBusy} hitSlop={8}>
               <Ionicons name="cloud-upload-outline" size={18} color={backupBusy ? colors.textFaint : colors.textSecondary} />
