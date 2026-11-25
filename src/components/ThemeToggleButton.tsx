@@ -17,24 +17,22 @@ export function ThemeToggleButton() {
     <Pressable
       onPress={toggleTheme}
       hitSlop={8}
-      style={[styles.btn, { top: insets.top + 8 }]}
+      style={[styles.btn, { top: Math.max(2, insets.top - SIZE) }]}
     >
-      <Ionicons name={theme === 'dark' ? 'moon' : 'sunny'} size={18} color={colors.textSecondary} />
+      <Ionicons name={theme === 'dark' ? 'moon' : 'sunny'} size={13}color={colors.textSecondary} />
     </Pressable>
   );
 }
 
-const SIZE = 38;
+const SIZE = 22;
 
 const makeStyles = (colors: ColorPalette) =>
   StyleSheet.create({
-    // Centered horizontally rather than pinned to a corner: every screen's header consistently
-    // pins its own controls (back button, menu, "Done", etc.) to the left and right edges, so the
-    // middle of the top row is the one spot free of collisions across the whole app.
+    // Tucked into the top-left corner, in the strip of the status-bar inset just above the screen
+    // headers, so it never covers a header button or page content.
     btn: {
       position: 'absolute',
-      left: '50%',
-      marginLeft: -SIZE / 2,
+      left: 12,
       width: SIZE,
       height: SIZE,
       borderRadius: SIZE / 2,
