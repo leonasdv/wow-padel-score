@@ -680,6 +680,102 @@ function bestQuartetSplit(
   return { teamA: best[0], teamB: best[1] };
 }
 
+/**
+ * Mixicano teams: matches each seated man with a seated woman so partners differ from past rounds as
+ * much as possible. `males` / `females` are ranked best-first and equal in length. Cost is squared
+ * partner repeats (dominant) plus the rank gap between partners (tiny tie-break, so with no history
+ * it falls back to the classic Nth-man + Nth-woman ladder pairing). Pairing happens once per round
+ * and rosters are small, so a randomized-restart swap search is plenty.
+ */
+function pickMixicanoPartners(males: Player[], females: Player[], partnerCount: Record<string, number>): [Player, Player][] {
+  const n = Math.min(males.length, females.length);
+  const costOf = (perm: number[]) => {
+    let c = 0;
+    for (let i = 0; i < n; i++) {
+      const r = partnerCount[pairKey(males[i].id, females[perm[i]].id)] ?? 0;
+      c += r * r * 100 + Math.abs(i - perm[i]);
+    }
+    return c;
+  };
+  let best = Array.from({ length: n }, (_, i) => i);
+  let bestCost = costOf(best);
+  for (let attempt = 0; attempt < 60 && bestCost >= 100; attempt++) {
+    let perm = attempt === 0 ? best.slice() : shuffle(best.slice());
+    let cost = costOf(perm);
+    let improved = true;
+    while (improved) {
+      improved = false;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          [perm[i], perm[j]] = [perm[j], perm[i]];
+          const c = costOf(perm);
+          if (c < cost) {
+            cost = c;
+            improved = true;
+          } else {
+            [perm[i], perm[j]] = [perm[j], perm[i]];
+          }
+        }
+      }
+    }
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = perm;
+    }
+  }
+  return best.map((fi, i) => [males[i], females[fi]] as [Player, Player]);
+}
+
+/**
+ * Mixicano courts: groups ranked teams into matches (consecutive slots in the returned order are
+ * opponents) preferring teams that haven't faced each other yet, while keeping opponents close in
+ * ranking — so repeat opponents are avoided without wrecking the ladder feel.
+ */
+function pickMixicanoMatchups(teams: [string, string][], opponentCount: Record<string, number>): [string, string][] {
+  const m = teams.length - (teams.length % 2);
+  const costOf = (order: number[]) => {
+    let c = 0;
+    for (let k = 0; k + 1 < m; k += 2) {
+      const a = teams[order[k]];
+      const b = teams[order[k + 1]];
+      for (const x of a) for (const y of b) {
+        const r = opponentCount[pairKey(x, y)] ?? 0;
+        c += r * r * 10;
+      }
+      c += Math.abs(order[k] - order[k + 1]) * 2; // rank gap
+      c += (order[k] + order[k + 1]) * 0.01; // stronger matches on lower-numbered courts
+    }
+    return c;
+  };
+  let best = Array.from({ length: teams.length }, (_, i) => i);
+  let bestCost = costOf(best);
+  for (let attempt = 0; attempt < 60 && bestCost >= 10; attempt++) {
+    const order = attempt === 0 ? best.slice() : shuffle(best.slice());
+    let cost = costOf(order);
+    let improved = true;
+    while (improved) {
+      improved = false;
+      for (let i = 0; i < teams.length; i++) {
+        for (let j = i + 1; j < teams.length; j++) {
+          [order[i], order[j]] = [order[j], order[i]];
+          const c = costOf(order);
+          if (c < cost) {
+            cost = c;
+            improved = true;
+          } else {
+            [order[i], order[j]] = [order[j], order[i]];
+          }
+        }
+      }
+    }
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = order;
+    }
+  }
+  return best.map((i) => teams[i]);
+}
+
 function generateRankingRound(
   format: 'mexicano' | 'mixicano',
   players: Player[],
@@ -703,20 +799,22 @@ function generateRankingRound(
 
   if (format === 'mixicano') {
     const { active, sitOuts } = pickSitOuts(players, playCount, capacity, true, matchesPerPlayer, playStreak);
-    const males = active.filter((p) => p.gender === 'M').sort((a, b) => pointsOf(b) - pointsOf(a));
-    const females = active.filter((p) => p.gender === 'F').sort((a, b) => pointsOf(b) - pointsOf(a));
-    const n = Math.min(males.length, females.length);
-    const teams: { players: [string, string]; pts: number }[] = [];
-    for (let i = 0; i < n; i++) {
-      teams.push({ players: [males[i].id, females[i].id], pts: pointsOf(males[i]) + pointsOf(females[i]) });
-    }
-    teams.sort((a, b) => b.pts - a.pts);
+    // Shuffle before sorting so ties (e.g. everyone on 0 in round 1) don't always land in roster order.
+    const males = shuffle(active.filter((p) => p.gender === 'M')).sort((a, b) => pointsOf(b) - pointsOf(a));
+    const females = shuffle(active.filter((p) => p.gender === 'F')).sort((a, b) => pointsOf(b) - pointsOf(a));
+    const { partnerCount, opponentCount } = deriveRotationHistory(players, rounds);
+    // Partners: a different woman for each man than any earlier round where possible.
+    const teams = pickMixicanoPartners(males, females, partnerCount)
+      .map(([m, f]) => ({ players: [m.id, f.id] as [string, string], pts: pointsOf(m) + pointsOf(f) }))
+      .sort((a, b) => b.pts - a.pts);
+    // Opponents: face teams not met yet, staying close in ranking.
+    const matchups = pickMixicanoMatchups(teams.map((t) => t.players), opponentCount);
     const matches: Match[] = [];
-    for (let i = 0; i + 1 < teams.length && matches.length < courts.length; i += 2) {
+    for (let i = 0; i + 1 < matchups.length && matches.length < courts.length; i += 2) {
       matches.push({
         courtId: courts[matches.length].id,
-        teamA: teams[i].players,
-        teamB: teams[i + 1].players,
+        teamA: matchups[i],
+        teamB: matchups[i + 1],
         scoreA: null,
         scoreB: null,
       });
