@@ -1211,6 +1211,16 @@ export function toggleBench(event: WowEvent, playerId: string): WowEvent {
   return { ...updated, rounds, totalRoundsEstimate: rounds.length };
 }
 
+/**
+ * Corrects a player's gender. Completed rounds and the round in progress are never touched — the
+ * fix takes effect from the next round, which Mixicano builds from the live roster.
+ */
+export function setPlayerGender(event: WowEvent, playerId: string, gender: Gender): WowEvent {
+  const target = event.players.find((p) => p.id === playerId);
+  if (!target || target.gender === gender) return event;
+  return { ...event, players: event.players.map((p) => (p.id === playerId ? { ...p, gender } : p)) };
+}
+
 /** Substitutes a participant with a new name in place — keeps their schedule slot and any completed-match scores. */
 export function replaceParticipant(event: WowEvent, playerId: string, newName: string, newGender?: Gender): WowEvent {
   return {

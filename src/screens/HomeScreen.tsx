@@ -11,13 +11,11 @@ import { useEvents } from '../data/store';
 import { Alert } from '../lib/alert';
 import { exportAllData, mergeEvents, pickBackupFile } from '../lib/backup';
 import { makeId } from '../lib/id';
-import { startEvent } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import type { ColorPalette } from '../theme/tokens';
 import { radius } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 import { eventFormatName, type WowEvent } from '../types';
-import { startTournament } from '../lib/tournamentMode';
 
 function formatDate(ts: number): string {
   const d = new Date(ts);
@@ -26,8 +24,8 @@ function formatDate(ts: number): string {
 
 export function HomeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { events, addEvent, deleteEvent, replaceAllEvents } = useEvents();
-  const { reset } = useDraft();
+  const { events, deleteEvent, replaceAllEvents } = useEvents();
+  const { reset, setDraft } = useDraft();
   const liveCount = events.filter((e) => e.status === 'live').length;
   const [backupBusy, setBackupBusy] = useState(false);
   const { colors, toggleTheme } = useTheme();
@@ -51,45 +49,35 @@ export function HomeScreen() {
     nav.navigate('CreateName');
   };
 
-  const onDuplicate = async (ev: WowEvent) => {
-    const newPlayers = ev.players.map((p) => ({ ...p, id: makeId('player') }));
+  // Duplicating re-runs the create flow instead of cloning the finished event: the old setup and roster
+  // prefill the draft, and the organizer lands on the player step to confirm who's in before going on.
+  const onDuplicate = (ev: WowEvent) => {
+    const newPlayers = ev.players.map((p) => ({ id: makeId('player'), name: p.name, gender: p.gender }));
     const newIdOf = new Map(ev.players.map((p, i) => [p.id, newPlayers[i].id]));
-    // A Tournament Mode copy restarts from the group stage (even if the original already moved on to its
-    // knockout) with the same groups, re-pointed at the copied players.
-    const tournamentCopy = ev.tournament
-      ? {
-          advanceCount: ev.tournament.advanceCount,
-          groups: ev.tournament.groups.map((g) => ({
-            id: makeId('group'),
-            name: g.name,
-            playerIds: g.playerIds.map((id) => newIdOf.get(id)).filter((id): id is string => !!id),
-          })),
-        }
-      : undefined;
-    const draftCopy: WowEvent = {
-      ...ev,
-      id: makeId('event'),
+    // A knockout that grew out of a group stage starts over as Tournament Mode, with the same groups.
+    const format = ev.tournament ? 'tournament' : ev.format;
+    const groups = ev.tournament?.groups ?? [];
+    const groupOf: Record<string, number> = {};
+    groups.forEach((g, gi) => g.playerIds.forEach((id) => {
+      const newId = newIdOf.get(id);
+      if (newId) groupOf[newId] = gi;
+    }));
+    reset();
+    setDraft((d) => ({
+      ...d,
       name: `${ev.name} (Copy)`,
-      format: tournamentCopy ? 'tournament' : ev.format,
-      tournament: tournamentCopy,
-      thirdPlaceMatch: undefined,
+      format,
+      scoringMode: ev.scoringMode,
+      pot: ev.pot,
       courts: ev.courts.map((c) => ({ ...c, id: makeId('court') })),
       players: newPlayers,
-      fixedTeams: undefined,
-      rounds: [],
-      totalRoundsEstimate: 0,
-      currentRoundIndex: 1,
-      status: 'draft',
-      createdAt: Date.now(),
-      resultBgUri: undefined,
-      shareId: undefined,
-      editToken: undefined,
-    };
-    const live = draftCopy.format === 'tournament' ? startTournament(draftCopy) : startEvent(draftCopy, ev.totalRoundsEstimate);
-    await addEvent(live);
-    if (live.format === 'tournament') nav.navigate('GroupStage', { eventId: live.id });
-    else if (live.format === 'knockout') nav.navigate('Knockout', { eventId: live.id });
-    else nav.navigate('Dashboard', { eventId: live.id });
+      numRounds: ev.totalRoundsEstimate > 0 ? ev.totalRoundsEstimate : d.numRounds,
+      matchesPerPlayer: ev.matchesPerPlayer,
+      groupCount: groups.length > 0 ? groups.length : d.groupCount,
+      groupOf,
+      advanceCount: ev.tournament?.advanceCount ?? d.advanceCount,
+    }));
+    nav.navigate('CreatePlayers');
   };
 
   const onDeleteRequest = (ev: WowEvent) => {

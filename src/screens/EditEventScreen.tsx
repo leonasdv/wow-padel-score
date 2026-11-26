@@ -8,6 +8,7 @@ import { AddPlayerModal } from '../components/AddPlayerModal';
 import { QrCodeModal } from '../components/QrCodeModal';
 import { RenameModal } from '../components/RenameModal';
 import { Avatar } from '../components/Avatar';
+import { GenderToggle } from '../components/GenderToggle';
 import { ScreenBackground } from '../components/Misc';
 import { SegmentedTabs } from '../components/SegmentedTabs';
 import { useEvents } from '../data/store';
@@ -15,7 +16,7 @@ import { Alert } from '../lib/alert';
 import { copyLinkWithFeedback } from '../lib/clipboard';
 import { makeId } from '../lib/id';
 import { editorShareUrlFor, publishEvent, setShareInputSource } from '../lib/share';
-import { addPlayerMidEvent, isRankingBased, isTeamFormat, toggleBench } from '../lib/tournament';
+import { addPlayerMidEvent, isRankingBased, isTeamFormat, setPlayerGender, toggleBench } from '../lib/tournament';
 import type { RootStackParamList } from '../navigation/types';
 import type { ColorPalette } from '../theme/tokens';
 import { radius } from '../theme/tokens';
@@ -110,6 +111,12 @@ export function EditEventScreen() {
   const onAddPlayer = async (name: string, gender: Gender) => {
     setAddPlayerVisible(false);
     await updateEvent(event.id, (e) => addPlayerMidEvent(e, { id: makeId('player'), name, gender }));
+  };
+
+  // Mixicano pairs by gender every round, so a wrong gender skews every later round — let it be fixed live.
+  const canEditGender = event.status === 'live' && event.format === 'mixicano';
+  const onSetGender = (id: string, gender: Gender) => {
+    updateEvent(event.id, (e) => setPlayerGender(e, id, gender));
   };
 
   const onToggleBench = (id: string) => {
@@ -224,7 +231,7 @@ export function EditEventScreen() {
               </Pressable>
             )}
           </View>
-          <Text style={styles.editHint}>{canEditRoster ? '⏸ bench · ✎ fix the name' : '✎ fix the name'}</Text>
+          <Text style={styles.editHint}>{[canEditRoster && '⏸ bench', canEditGender && 'M/F fix the gender', '✎ fix the name'].filter(Boolean).join(' · ')}</Text>
           <View style={{ gap: 9 }}>
             {event.players.map((p) => (
               <View key={p.id} style={[styles.playerRow, p.benched && styles.playerRowBenched]}>
@@ -237,7 +244,8 @@ export function EditEventScreen() {
                     <Text style={styles.benchBadgeText}>⏸ BENCHED</Text>
                   </View>
                 )}
-                <View style={{ flexDirection: 'row', gap: 14 }}>
+                <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+                  {canEditGender && <GenderToggle compact value={p.gender} onChange={(g) => onSetGender(p.id, g)} />}
                   {canEditRoster && (
                     <Pressable onPress={() => onToggleBench(p.id)} hitSlop={8}>
                       <Ionicons
