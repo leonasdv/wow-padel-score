@@ -1094,6 +1094,24 @@ export function extendRounds(event: WowEvent, additionalRounds: number): WowEven
   return { ...event, rounds, totalRoundsEstimate: rounds.length, currentRoundIndex, status: 'live' };
 }
 
+/** How many not-yet-started rounds can still be dropped — the live round and everything before it stay. */
+export function removableRoundCount(event: WowEvent): number {
+  return Math.max(event.totalRoundsEstimate - event.currentRoundIndex, 0);
+}
+
+/**
+ * Drops up to `count` rounds from the end of the schedule, never touching the live round or any
+ * earlier one. Pre-generated formats lose the trailing rounds from `rounds`; formats that build
+ * one round at a time from standings have nothing generated ahead, so only the target shrinks.
+ */
+export function removeRounds(event: WowEvent, count: number): WowEvent {
+  const n = Math.min(Math.max(Math.floor(count), 0), removableRoundCount(event));
+  if (n === 0) return event;
+  const totalRoundsEstimate = event.totalRoundsEstimate - n;
+  const rounds = event.rounds.filter((r) => r.index <= totalRoundsEstimate);
+  return { ...event, rounds, totalRoundsEstimate };
+}
+
 export function addPlayerMidEvent(event: WowEvent, player: Player): WowEvent {
   const players = [...event.players, player];
   const completed = event.rounds.filter((r) => r.completed);

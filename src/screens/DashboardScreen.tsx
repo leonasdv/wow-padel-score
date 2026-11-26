@@ -24,6 +24,8 @@ import {
   computeStandings,
   describeTiebreak,
   extendRounds,
+  removableRoundCount,
+  removeRounds,
   isRankingBased,
   isTeamFormat,
   leaguePointsPerMatch,
@@ -225,6 +227,19 @@ export function DashboardScreen() {
       { text: '+1', onPress: () => updateEvent(event.id, (e) => extendRounds(e, 1)) },
       { text: '+3', onPress: () => updateEvent(event.id, (e) => extendRounds(e, 3)) },
       { text: '+5', onPress: () => updateEvent(event.id, (e) => extendRounds(e, 5)) },
+    ]);
+  };
+
+  const removable = removableRoundCount(event);
+  const onRemoveRounds = () => {
+    const options = [1, 3, 5].filter((n) => n <= removable);
+    Alert.alert('Remove rounds', `Drop rounds from the end of the schedule. The current round and earlier ones stay. Up to ${removable} can be removed.`, [
+      { text: 'Cancel', style: 'cancel' },
+      ...options.map((n) => ({
+        text: `-${n}`,
+        style: 'destructive' as const,
+        onPress: () => updateEvent(event.id, (e) => removeRounds(e, n)),
+      })),
     ]);
   };
 
@@ -552,6 +567,12 @@ export function DashboardScreen() {
                     <Ionicons name="add-circle-outline" size={16} color={colors.lime} />
                     <Text style={styles.actionText}>Add rounds</Text>
                   </Pressable>
+                  {removable > 0 && (
+                    <Pressable style={styles.actionBtn} onPress={onRemoveRounds}>
+                      <Ionicons name="remove-circle-outline" size={16} color={colors.lime} />
+                      <Text style={styles.actionText}>Remove rounds</Text>
+                    </Pressable>
+                  )}
                   <Pressable style={styles.actionBtn} onPress={() => setAddPlayerVisible(true)}>
                     <Ionicons name="person-add-outline" size={16} color={colors.lime} />
                     <Text style={styles.actionText}>Add {entityWord}</Text>
@@ -809,8 +830,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   sitOutText: { fontSize: 12, color: colors.textFaint, textAlign: 'center', marginTop: 4 },
   addPlayerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
   addPlayerText: { color: colors.lime, fontWeight: '800', fontSize: 14 },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12, gap: 6 },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', paddingVertical: 12, gap: 6 },
+  actionBtn: { flexGrow: 1, flexBasis: '30%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   actionText: { color: colors.lime, fontWeight: '800', fontSize: 13 },
   endEventRow: { alignItems: 'center', paddingVertical: 8 },
   endEventText: { color: colors.textFaint, fontWeight: '700', fontSize: 13, textDecorationLine: 'underline' },
