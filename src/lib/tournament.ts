@@ -684,46 +684,194 @@ function bestQuartetSplit(
  * Mixicano teams: matches each seated man with a seated woman so partners differ from past rounds as
  * much as possible. `males` / `females` are ranked best-first and equal in length. Cost is squared
  * partner repeats (dominant) plus the rank gap between partners (tiny tie-break, so with no history
- * it falls back to the classic Nth-man + Nth-woman ladder pairing). Pairing happens once per round
- * and rosters are small, so a randomized-restart swap search is plenty.
+ * it falls back to the classic Nth-man + Nth-woman ladder pairing). Solved exactly, so every round
+ * gets the fewest possible repeat partnerships — each man meets a new woman whenever one exists.
  */
 function pickMixicanoPartners(males: Player[], females: Player[], partnerCount: Record<string, number>): [Player, Player][] {
   const n = Math.min(males.length, females.length);
-  const costOf = (perm: number[]) => {
+  if (n === 0) return [];
+  const cost = (i: number, j: number) => {
+    const r = partnerCount[pairKey(males[i].id, females[j].id)] ?? 0;
+    return r * r * 100 + Math.abs(i - j);
+  };
+  const assignment = solveAssignment(n, cost);
+  return assignment.map((fi, i) => [males[i], females[fi]] as [Player, Player]);
+}
+
+/**
+ * Exact minimum-cost assignment of n rows to n columns (Hungarian algorithm, O(n^3)). Returns, for
+ * each row, its assigned column.
+ */
+function solveAssignment(n: number, cost: (row: number, col: number) => number): number[] {
+  const INF = Number.MAX_SAFE_INTEGER;
+  const u = new Array<number>(n + 1).fill(0);
+  const v = new Array<number>(n + 1).fill(0);
+  const matchCol = new Array<number>(n + 1).fill(0); // matchCol[j] = row (1-based) assigned to column j
+  const way = new Array<number>(n + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    matchCol[0] = i;
+    let j0 = 0;
+    const minv = new Array<number>(n + 1).fill(INF);
+    const used = new Array<boolean>(n + 1).fill(false);
+    do {
+      used[j0] = true;
+      const i0 = matchCol[j0];
+      let delta = INF;
+      let j1 = 0;
+      for (let j = 1; j <= n; j++) {
+        if (used[j]) continue;
+        const cur = cost(i0 - 1, j - 1) - u[i0] - v[j];
+        if (cur < minv[j]) {
+          minv[j] = cur;
+          way[j] = j0;
+        }
+        if (minv[j] < delta) {
+          delta = minv[j];
+          j1 = j;
+        }
+      }
+      for (let j = 0; j <= n; j++) {
+        if (used[j]) {
+          u[matchCol[j]] += delta;
+          v[j] -= delta;
+        } else {
+          minv[j] -= delta;
+        }
+      }
+      j0 = j1;
+    } while (matchCol[j0] !== 0);
+    do {
+      const j1 = way[j0];
+      matchCol[j0] = matchCol[j1];
+      j0 = j1;
+    } while (j0 !== 0);
+  }
+  const result = new Array<number>(n).fill(0);
+  for (let j = 1; j <= n; j++) result[matchCol[j] - 1] = j - 1;
+  return result;
+}
+
+/**
+ * Mixicano seating. Unlike the strict even-gender seating of Mix Americano, who plays is decided by
+ * fewest matches played (then shortest play streak) regardless of gender, so an M/F imbalance can't
+ * leave the majority gender behind on games. Among players tied at the cut-off, it picks whoever
+ * keeps the seated M/F counts closest, so as many teams as possible are mixed. Capacity is a
+ * multiple of 4 (2 teams per court); `cap` players already at their target sit out.
+ */
+function pickMixicanoSeating(
+  players: Player[],
+  playCount: Record<string, number>,
+  capacityPerRound: number,
+  cap: number | undefined,
+  streak: Record<string, number>,
+  partnerCount: Record<string, number>
+): { active: Player[]; sitOuts: Player[] } {
+  const eligible = cap != null ? players.filter((p) => (playCount[p.id] ?? 0) < cap) : players;
+  const capped = cap != null ? players.filter((p) => (playCount[p.id] ?? 0) >= cap) : [];
+  const sorted = shuffle(eligible).sort(
+    (a, b) => (playCount[a.id] ?? 0) - (playCount[b.id] ?? 0) || (streak[a.id] ?? 0) - (streak[b.id] ?? 0)
+  );
+  const usable = Math.min(sorted.length, capacityPerRound) - (Math.min(sorted.length, capacityPerRound) % 4);
+  if (usable <= 0) return { active: [], sitOuts: [...sorted, ...capped] };
+
+  const threshold = playCount[sorted[usable - 1].id] ?? 0;
+  const sure = sorted.filter((p) => (playCount[p.id] ?? 0) < threshold);
+  const tierAll = sorted.filter((p) => (playCount[p.id] ?? 0) === threshold);
+
+  // Picks the seats left over from the tied tier, keeping seated M/F counts as even as possible.
+  const seat = (tierOrder: Player[]): Player[] => {
+    const tier = tierOrder.slice();
+    let males = sure.filter((p) => p.gender === 'M').length;
+    let females = sure.length - males;
+    const chosen: Player[] = [];
+    while (sure.length + chosen.length < usable && tier.length > 0) {
+      const wanted: Gender = males <= females ? 'M' : 'F';
+      let idx = tier.findIndex((p) => p.gender === wanted);
+      if (idx === -1) idx = 0;
+      const [pick] = tier.splice(idx, 1);
+      chosen.push(pick);
+      if (pick.gender === 'M') males++;
+      else females++;
+    }
+    return [...sure, ...chosen];
+  };
+  // Fewest forced repeat M/F partnerships if this group were seated (exact assignment on past partner counts).
+  const repeatPenalty = (group: Player[]): number => {
+    const ms = group.filter((p) => p.gender === 'M');
+    const fs = group.filter((p) => p.gender === 'F');
+    const n = Math.min(ms.length, fs.length);
+    if (n === 0) return 0;
+    const cost = (i: number, j: number) => {
+      const r = partnerCount[pairKey(ms[i].id, fs[j].id)] ?? 0;
+      return r * r;
+    };
+    const assignment = solveAssignment(n, cost);
+    return assignment.reduce((sum, fj, i) => sum + cost(i, fj), 0);
+  };
+
+  // Players tied on games played are interchangeable for fairness, so choose among them the group
+  // that can still be paired with new partners. Attempt 0 keeps the streak order; the rest shuffle
+  // ties (streak order still applied after the shuffle, so rested players stay preferred).
+  let active = seat(tierAll);
+  let bestPenalty = repeatPenalty(active);
+  for (let attempt = 0; attempt < 40 && bestPenalty > 0 && tierAll.length > usable - sure.length; attempt++) {
+    const order = shuffle(tierAll).sort((a, b) => (streak[a.id] ?? 0) - (streak[b.id] ?? 0));
+    const group = seat(order);
+    const penalty = repeatPenalty(group);
+    if (penalty < bestPenalty) {
+      bestPenalty = penalty;
+      active = group;
+    }
+  }
+  const activeIds = new Set(active.map((p) => p.id));
+  return { active, sitOuts: [...sorted.filter((p) => !activeIds.has(p.id)), ...capped] };
+}
+
+/** How many past matches each player has spent partnered with someone of their own gender. */
+function countSameGenderPartnerings(players: Player[], rounds: Round[]): Record<string, number> {
+  const genderOf = Object.fromEntries(players.map((p) => [p.id, p.gender]));
+  const out: Record<string, number> = {};
+  for (const r of rounds) {
+    for (const m of r.matches) {
+      for (const team of [m.teamA, m.teamB]) {
+        if (team.length === 2 && genderOf[team[0]] === genderOf[team[1]]) {
+          out[team[0]] = (out[team[0]] ?? 0) + 1;
+          out[team[1]] = (out[team[1]] ?? 0) + 1;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Pairs an even-sized, rank-sorted list into same-gender teams, avoiding repeat partners first and
+ * keeping partners close in rank second (identity order = adjacent ranks when there's no history).
+ */
+function pickSameGenderPartners(list: Player[], partnerCount: Record<string, number>): [Player, Player][] {
+  const n = list.length - (list.length % 2);
+  if (n < 2) return [];
+  const costOf = (order: number[]) => {
     let c = 0;
-    for (let i = 0; i < n; i++) {
-      const r = partnerCount[pairKey(males[i].id, females[perm[i]].id)] ?? 0;
-      c += r * r * 100 + Math.abs(i - perm[i]);
+    for (let k = 0; k + 1 < n; k += 2) {
+      const r = partnerCount[pairKey(list[order[k]].id, list[order[k + 1]].id)] ?? 0;
+      c += r * r * 100 + Math.abs(order[k] - order[k + 1]);
     }
     return c;
   };
   let best = Array.from({ length: n }, (_, i) => i);
   let bestCost = costOf(best);
   for (let attempt = 0; attempt < 60 && bestCost >= 100; attempt++) {
-    let perm = attempt === 0 ? best.slice() : shuffle(best.slice());
-    let cost = costOf(perm);
-    let improved = true;
-    while (improved) {
-      improved = false;
-      for (let i = 0; i < n; i++) {
-        for (let j = i + 1; j < n; j++) {
-          [perm[i], perm[j]] = [perm[j], perm[i]];
-          const c = costOf(perm);
-          if (c < cost) {
-            cost = c;
-            improved = true;
-          } else {
-            [perm[i], perm[j]] = [perm[j], perm[i]];
-          }
-        }
-      }
-    }
+    const order = shuffle(best.slice());
+    const cost = costOf(order);
     if (cost < bestCost) {
       bestCost = cost;
-      best = perm;
+      best = order;
     }
   }
-  return best.map((fi, i) => [males[i], females[fi]] as [Player, Player]);
+  const pairs: [Player, Player][] = [];
+  for (let k = 0; k + 1 < n; k += 2) pairs.push([list[best[k]], list[best[k + 1]]]);
+  return pairs;
 }
 
 /**
@@ -731,13 +879,15 @@ function pickMixicanoPartners(males: Player[], females: Player[], partnerCount: 
  * opponents) preferring teams that haven't faced each other yet, while keeping opponents close in
  * ranking — so repeat opponents are avoided without wrecking the ladder feel.
  */
-function pickMixicanoMatchups(teams: [string, string][], opponentCount: Record<string, number>): [string, string][] {
+function pickMixicanoMatchups(teams: [string, string][], opponentCount: Record<string, number>, kinds?: number[]): [string, string][] {
   const m = teams.length - (teams.length % 2);
   const costOf = (order: number[]) => {
     let c = 0;
     for (let k = 0; k + 1 < m; k += 2) {
       const a = teams[order[k]];
       const b = teams[order[k + 1]];
+      // Mixed-vs-mixed (or same-gender-vs-same-gender) is the fairest match; mismatches cost extra.
+      if (kinds) c += Math.abs(kinds[order[k]] - kinds[order[k + 1]]) * 6;
       for (const x of a) for (const y of b) {
         const r = opponentCount[pairKey(x, y)] ?? 0;
         c += r * r * 10;
@@ -789,7 +939,6 @@ function generateRankingRound(
   const playCount: Record<string, number> = Object.fromEntries(players.map((p) => [p.id, byId[p.id]?.played ?? 0]));
   const capacity = courts.length * 4;
   const playStreak = deriveRotationHistory(players, rounds).playStreak ?? {};
-  const pointsOf = (p: Player) => byId[p.id]?.points ?? 0;
   // Points per match played so far — used (mexicano only) instead of raw points so a recent bye
   // doesn't bury a player who simply hasn't rotated back onto court as often yet.
   const rateOf = (p: Player) => {
@@ -798,17 +947,43 @@ function generateRankingRound(
   };
 
   if (format === 'mixicano') {
-    const { active, sitOuts } = pickSitOuts(players, playCount, capacity, true, matchesPerPlayer, playStreak);
-    // Shuffle before sorting so ties (e.g. everyone on 0 in round 1) don't always land in roster order.
-    const males = shuffle(active.filter((p) => p.gender === 'M')).sort((a, b) => pointsOf(b) - pointsOf(a));
-    const females = shuffle(active.filter((p) => p.gender === 'F')).sort((a, b) => pointsOf(b) - pointsOf(a));
     const { partnerCount, opponentCount } = deriveRotationHistory(players, rounds);
-    // Partners: a different woman for each man than any earlier round where possible.
-    const teams = pickMixicanoPartners(males, females, partnerCount)
-      .map(([m, f]) => ({ players: [m.id, f.id] as [string, string], pts: pointsOf(m) + pointsOf(f) }))
-      .sort((a, b) => b.pts - a.pts);
-    // Opponents: face teams not met yet, staying close in ranking.
-    const matchups = pickMixicanoMatchups(teams.map((t) => t.players), opponentCount);
+    // Seat by fewest matches played first (so total games even out over time), only then by gender
+    // mix and fresh partners — an imbalanced roster never leaves the majority gender short of games.
+    const { active, sitOuts } = pickMixicanoSeating(players, playCount, capacity, matchesPerPlayer, playStreak, partnerCount);
+    // Shuffle before sorting so ties (e.g. everyone on 0 in round 1) don't always land in roster order.
+    // Ranked by points per match played, so a recent bye doesn't bury anyone.
+    const males = shuffle(active.filter((p) => p.gender === 'M')).sort((a, b) => rateOf(b) - rateOf(a));
+    const females = shuffle(active.filter((p) => p.gender === 'F')).sort((a, b) => rateOf(b) - rateOf(a));
+
+    // Mixed teams (1M + 1F) wherever possible. With an imbalance, the surplus gender partners up
+    // same-gender; those picked are whoever has had the fewest same-gender partnerships so far.
+    const surplusGender: Gender | null = males.length > females.length ? 'M' : females.length > males.length ? 'F' : null;
+    const majority = surplusGender === 'M' ? males : females;
+    const surplusCount = Math.abs(males.length - females.length);
+    const sameGenderPartnered = countSameGenderPartnerings(players, rounds);
+    const surplus = shuffle(majority.slice())
+      .sort((a, b) => (sameGenderPartnered[a.id] ?? 0) - (sameGenderPartnered[b.id] ?? 0))
+      .slice(0, surplusCount)
+      .sort((a, b) => rateOf(b) - rateOf(a));
+    const surplusIds = new Set(surplus.map((p) => p.id));
+    const mixedMales = males.filter((p) => !surplusIds.has(p.id));
+    const mixedFemales = females.filter((p) => !surplusIds.has(p.id));
+
+    const teams = [
+      ...pickMixicanoPartners(mixedMales, mixedFemales, partnerCount).map(([m, f]) => ({
+        players: [m.id, f.id] as [string, string],
+        pts: rateOf(m) + rateOf(f),
+        kind: 1,
+      })),
+      ...pickSameGenderPartners(surplus, partnerCount).map(([a, b]) => ({
+        players: [a.id, b.id] as [string, string],
+        pts: rateOf(a) + rateOf(b),
+        kind: surplusGender === 'M' ? 2 : 0, // number of men on the team
+      })),
+    ].sort((a, b) => b.pts - a.pts);
+    // Opponents: face teams not met yet, staying close in ranking and, where possible, same team type.
+    const matchups = pickMixicanoMatchups(teams.map((t) => t.players), opponentCount, teams.map((t) => t.kind));
     const matches: Match[] = [];
     for (let i = 0; i + 1 < matchups.length && matches.length < courts.length; i += 2) {
       matches.push({
@@ -949,14 +1124,15 @@ export function generateTeamMexicanoRound(
 /**
  * Whether a matches-per-player target is achievable with an exactly equal split for every
  * participant. Quartet formats need `players × target` divisible by 4 (4 players per match);
- * team_americano needs `teams × target` divisible by 2 (2 teams per match). Gendered formats
- * (Mix Americano / Mixicano) additionally need equal male/female counts, since every match pairs
- * one of each — an imbalance means the majority gender can never all reach the same count.
+ * team_americano needs `teams × target` divisible by 2 (2 teams per match). Mix Americano additionally
+ * needs equal male/female counts, since every match pairs one of each. Mixicano doesn't: with an
+ * imbalance the surplus gender partners same-gender, so everyone can still reach the same count.
  */
 export function matchesPerPlayerIsFeasible(format: Format, players: Player[], matchesPerPlayer: number): boolean {
   if (!Number.isFinite(matchesPerPlayer) || matchesPerPlayer <= 0) return false;
   if (isTeamFormat(format)) return (players.length * matchesPerPlayer) % 2 === 0;
-  if (format === 'mix_americano' || format === 'mixicano') {
+  // Mixicano tolerates an M/F imbalance (surplus players partner same-gender), so only Mix Americano needs equal counts.
+  if (format === 'mix_americano') {
     const males = players.filter((p) => p.gender === 'M').length;
     if (males !== players.length - males) return false;
   }
@@ -971,7 +1147,8 @@ export function estimateRoundsForMatchesPerPlayer(format: Format, players: Playe
     // Team Americano's scheduler gives the same count Team Mexicano's live, standings-driven rounds will need.
     return generateTeamAmericanoSchedule(createFixedTeams(players), courts, 0, 0, undefined, matchesPerPlayer).length;
   }
-  const rotationFormat: Format = format === 'mixicano' ? 'mix_americano' : format === 'mexicano' ? 'americano' : format;
+  // Mixicano seats purely by fewest-played (gender only shapes the teams), so its round count matches plain Americano.
+  const rotationFormat: Format = format === 'mixicano' || format === 'mexicano' ? 'americano' : format;
   return generateRotationSchedule(rotationFormat, players, courts, 0, 0, undefined, matchesPerPlayer).length;
 }
 
